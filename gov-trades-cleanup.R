@@ -202,9 +202,28 @@ gov_trades <- gov_trades %>%
  
   
 
-
-
 ## Append S&P 500 Price that day
+VOO <- yf_get(tickers = "VOO", # S&P 500
+       first_date = first.date,
+       last_date = last.date, 
+       freq_data = freq.data,
+       do_cache = FALSE,
+       thresh_bad_data = 0)
+
+gov_trades <- gov_trades %>%
+  left_join(y=VOO, by = c("transaction_date" = "ref_date")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -ticker.y) %>%
+  rename(price_voo = price_adjusted, volume = volume.x, ticker = ticker.x)
+
+gov_trades <- gov_trades %>% rename(ticker = ticker.x)
+
+## Reorder Columns
+
+gov_trades <- gov_trades[,c("ticker", "disclosure_year", "disclosure_date", "transaction_date", 
+              "lower_bound", "upper_bound", "volume", "price", "price_one_month", 
+              "price_three_months" ,"price_one_year" ,"price_voo", "asset_description", 
+              "type","owner", "representative", "district", "state", "cap_gains_over_200_usd",
+              "industry", "sector", "party")]
 
 
 ## WRITE IT TO.CSV ##
