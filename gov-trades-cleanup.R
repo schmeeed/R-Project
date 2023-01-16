@@ -2,6 +2,7 @@ library(jsonlite)
 library(dplyr)
 library(stringr)
 library(tidyr)
+library(lubridate)
 library(purrr)
 library(yfR) # yahoo finance package
 
@@ -180,6 +181,30 @@ stocks <- bind_rows(stocks1, stocks2, stocks2a, stocks3, stocks4, stocks4a, stoc
 gov_trades <- gov_trades %>% 
   left_join(y=stocks, by = c("transaction_date" = "ref_date", "ticker" = "ticker")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices)
+
+## APPENDING GOVERNMENT TRADES WITH PRICE DATA FROM 30/90/365 days from THAT DATE ##
+gov_trades <- gov_trades %>% 
+  mutate(price_one_month_date = transaction_date + months(1),
+                      price_three_months_date = transaction_date + months(3),
+                      price_one_year_date = transaction_date + years(1)) %>%
+  # price_one_month later
+  left_join(y=stocks, by = c("price_one_month_date" = "ref_date", "ticker" = "ticker")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_one_month_date) %>%
+  rename(price_one_month = price_adjusted.y, volume = volume.x, price = price_adjusted.x) %>%
+  # price_three_months later
+  left_join(y=stocks, by = c("price_three_months_date" = "ref_date", "ticker" = "ticker")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_three_months_date) %>%
+  rename(price_three_months = price_adjusted, volume = volume.x) %>%
+  # price_one_year later
+  left_join(y=stocks, by = c("price_one_year_date" = "ref_date", "ticker" = "ticker")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_one_year_date) %>%
+  rename(price_one_year = price_adjusted, volume = volume.x)
+ 
+  
+
+
+
+## Append S&P 500 Price that day
 
 
 ## WRITE IT TO.CSV ##
