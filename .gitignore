@@ -11,7 +11,6 @@
 ##############
 *.csv
 
-
 # Packages #
 ############
 # it's better to unpack these files and commit the raw source
@@ -46,7 +45,7 @@ Thumbs.db
 .Rapp.history
 
 # Session Data files
-.RData
+*.RData
 .RDataTmp
 
 # User-specific files
