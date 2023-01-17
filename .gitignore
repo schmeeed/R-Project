@@ -9,7 +9,7 @@
 
 # DATA FILES #
 ##############
-.csv
+*.csv
 
 
 # Packages #
