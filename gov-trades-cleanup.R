@@ -6,6 +6,7 @@ library(lubridate)
 library(purrr)
 library(yfR) # yahoo finance package
 
+
 ## LOAD DATA
 
 url <- "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
@@ -225,6 +226,67 @@ gov_trades <- gov_trades[,c("ticker", "disclosure_year", "disclosure_date", "tra
               "type","owner", "representative", "district", "state", "cap_gains_over_200_usd",
               "industry", "sector", "party")]
 
+## FORMAT REPRESENTATIVE NAMES and temporarily append first, middle, last, etc columns
+
+install.packages("humaniformat") # formatting and parsing human names # https://cran.r-project.org/web/packages/humaniformat/vignettes/Introduction.html#:~:text=humaniformat%20is%20an%20R%20package,middle%2D%20and%20last%2Dnames.
+library(humaniformat)
+
+names_trades <- unique(gov_trades$representative)
+names_trades <- format_period(names_trades)
+parsed_names_trades <- parse_names(names_trades)
+
+gov_trades <- gov_trades %>%
+  left_join(y=parsed_names_trades, by = c("representative" = "full_name"))
+  
+## IMPORT COMMITTEE DATA: What Committees each representative was on in each year
+committee_2020 <- read.csv("data/committee_2020.csv", header = TRUE, sep = ",")
+committee_2021 <- read.csv("data/committee_2021.csv", header = TRUE, sep = ",")
+committee_2022 <- read.csv("data/committee_2022.csv", header = TRUE, sep = ",")
+
+## CLEAN COMMITTEE DATA
+
+## Split committee names into nested list ("Tech | agriculture" --> "Tech" "Agriculture")
+committee_2020$Committee.Assignment_Collapsed <- sapply(strsplit(committee_2020$Committee.Assignment, "|"), function(x) paste(x, collapse = ":"))
+committee_2021$Committee.Assignment_Collapsed <- sapply(str_split(committee_2021$Committee.Assignment, "(?<=[a-z])(?=[A-Z])"), function(x) paste(x, collapse = ":"))
+committee_2022$Committee.Assignment_Collapsed <- sapply(str_split(committee_2022$Committee.Assignment, "(?<=[a-z])(?=[A-Z])"), function(x) paste(x, collapse = ":"))
+
+## DUMIFY Rows into columns binary
+#install.packages("fastDummies")
+library(fastDummies)
+
+committee_2020 %>% 
+  rename(c = Committee.Assignment_Collapsed) %>%
+  select(-Committee.Assignment) %>%
+  dummy_cols(split = ":", select_columns = "c", remove_selected_columns = TRUE)
+
+committee_2021 <- committee_2021 %>% 
+  rename(c = Committee.Assignment_Collapsed) %>%
+  select(-Committee.Assignment) %>%
+  dummy_cols(split = ":", select_columns = "c", remove_selected_columns = TRUE)
+
+
+committee_2022 <- committee_2022 %>% 
+  rename(c = Committee.Assignment_Collapsed) %>%
+  select(-Committee.Assignment) %>%
+  dummy_cols(split = ":", select_columns = "c", remove_selected_columns = TRUE)
+
+## Format Names to prepare for merging
+#install.packages("humaniformat")
+library(humaniformat)
+committee_2021$Name <- format_period(committee_2021$Name)
+committee_2021$Name <- format_reverse(committee_2021$Name)
+committee_2021 <- committee_2021 %>% mutate(parse_names(committee_2021$Name))
+
+committee_2022$Name <- format_period(committee_2022$Name)
+committee_2022$Name <- format_reverse(committee_2022$Name)
+committee_2022 <- committee_2022 %>% mutate(parse_names(committee_2022$Name))
+
+
+
+## Join `gov_trades` with `committee_20xx`
+gov_trades %>%
+  left_join(y=committee_2020, by = c("first_name", "last_name")) ## CRETING DUPLICATES
+
 
 ## WRITE IT TO.CSV ##
 write.csv(gov_trades, 
@@ -236,12 +298,10 @@ write.csv(stocks,
           row.names = FALSE)
 
 
-
-
-
-
 ###########################
 #FAILED EXPLORATION CODE
+
+
 
 
 # tq_get("AAPL", get = "stock.prices", from = "2015-01-01",adjusted = TRUE)
