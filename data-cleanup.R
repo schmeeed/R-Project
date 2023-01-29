@@ -370,8 +370,11 @@ gov_trades$representative <- format_period(gov_trades$representative)
 gov_trades <- gov_trades %>% mutate(parse_names(gov_trades$representative))
 
 
+#### Unique Legislators and demographic info ####
 
-
+reps <- gov_trades %>% 
+  select(representative, district, state, party, salutation, first_name, middle_name, last_name, suffix, full_name) %>%
+  unique()
 ##########
 
 report_days <- read.csv("data/RAW-economic-indicators-reports-2020-2022.csv", header = TRUE, sep = ",")
@@ -400,6 +403,11 @@ write.csv(committee_2022,
 write.csv(report_days,
           file = "data/CLEAN-gov-report-days",
           row.names = FALSE)
+write.csv(reps,
+          file = "data/CLEAN-representatives-unique.csv",
+          row.names = FALSE)
+
+
 
 
 
