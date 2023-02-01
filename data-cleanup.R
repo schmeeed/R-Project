@@ -401,7 +401,7 @@ write.csv(committee_2022,
           file = "data/CLEAN-committee-2022-data.csv", 
           row.names = FALSE)
 write.csv(report_days,
-          file = "data/CLEAN-gov-report-days",
+          file = "data/CLEAN-gov-report-days.csv",
           row.names = FALSE)
 write.csv(reps,
           file = "data/CLEAN-representatives-unique.csv",
