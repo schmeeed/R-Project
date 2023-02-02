@@ -380,6 +380,9 @@ reps <- gov_trades %>%
 report_days <- read.csv("data/RAW-economic-indicators-reports-2020-2022.csv", header = TRUE, sep = ",")
 report_days$report_date <- as.Date(report_days$report_date, format = "%m/%d/%y")
 
+gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "sale_full", "sale"), "sell", type),
+                                    type = ifelse(type=="purchase", "buy", type))
+
 ## WRITE IT ALL TO.CSV ##
 write.csv(gov_trades, 
           file = 'data/CLEAN-gov-trades.csv', 

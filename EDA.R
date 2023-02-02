@@ -22,8 +22,7 @@ gov_trades %>%
   summarise(average_delay = mean(delay), max_delay = max(delay), min_delay = min(delay))
 
 #### Buy performance vs Sell Performance ####
-gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "sale_full", "sale"), "sell", type),
-                                    type = ifelse(type=="purchase", "buy", type))
+
 #BUY
 gov_trades %>%
   mutate(buy_performance_one_month = ifelse(type == "buy", price_one_month-price, NA),
@@ -186,36 +185,6 @@ gov_trades %>%
   geom_col(aes(fill=period), position = "dodge") +
   aes(x = fct_reorder(representative,returns, .desc = TRUE)) +
   geom_text(aes(label = percent(returns, accuracy = .01)), position = position_dodge(width = 1))
-
-#########################################################   
-
-#install.packages("treemap")
-library(treemap)
-
-tree <-  gov_trades %>% filter(representative == "Nancy Pelosi") %>% 
-  mutate(price_return_one_month = (price_one_month-price)/price,
-         price_return_three_months = (price_three_months-price)/price,
-         price_return_one_year = (price_one_year-price)/price,
-         voo_return_one_month = (voo_one_month-voo)/voo,
-         voo_return_three_months = (voo_three_months-voo)/voo,
-         voo_return_one_year = (voo_one_year-voo)/voo) %>% 
-  group_by(sector) %>%
-  summarise(avg_short_return = mean(price_return_one_month, na.rm = TRUE), count = n())
-
-
-tree
-# Create tree map
-treemap(tree,
-        index="sector",
-        vSize="count",
-        vColor = "avg_short_return",
-        type = "value",
-        title="Stocks by Sector",
-        fontsize.title=20)
-
-
-
-
 
 
 
@@ -460,6 +429,85 @@ gov_trades %>%
         legend.position = "none") +
   scale_fill_manual(values = pal)
 
+####Treemap####
+
+gov_trades %>%
+  filter((state == "CT") & (representative == "Joe Courtney")) %>%
+  group_by(sector) %>%
+  count() %>%
+  ggplot(aes(x=sector, y=n)) +
+  geom_col()
+
+library(treemap)
+
+  # group_by(sector) %>%
+  # summarise(avg_short_return = mean(price_return_one_month, na.rm = TRUE), 
+  #           avg_mid_return = mean(price_return_three_months, na.rm = TRUE),
+  #           avg_long_return = mean(price_return_one_year, na.rm = TRUE),
+  #           lower_bound_sum = sum(lower_bound),
+  #           upper_bound_sum = sum(upper_bound),
+  #           count = n())
+
+# Create tree map
+gov_trades %>% 
+  filter((state == "CT") & (representative == "Joe Courtney") & (type == "buy")) %>%
+  mutate(price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         voo_return_one_month = (voo_one_month-voo)/voo,
+         voo_return_three_months = (voo_three_months-voo)/voo,
+         voo_return_one_year = (voo_one_year-voo)/voo) %>%
+  treemap(index= c("sector","ticker"),
+        vSize="lower_bound",
+        vColor = "price_return_one_month",
+        type = "value",
+        title="Stocks by Sector",
+        fontsize.title=20)
+####   ####
+
+pal <- c("Winner" = "#01FF70",
+         "Loser" = "grey")
+
+
+gov_trades %>%
+  filter((state == "CA") & (representative == "Zoe Lofgren") & (type == "buy")) %>%
+  mutate(price_performance_one_month = (price_one_month-price)/price,
+         price_performance_three_months = (price_three_months-price)/price,
+         price_performance_one_year = (price_one_year-price)/price,
+         voo_performance_one_month = (voo_one_month-voo)/price,
+         voo_performance_three_months = (voo_three_months-voo)/price,
+         voo_performance_one_year = (voo_one_year-voo)/price) %>%
+  summarise(type = "buy",
+            gov_short = mean(price_performance_one_month, na.rm = TRUE),
+            voo_short = mean(voo_performance_one_month, na.rm = TRUE),
+            gov_med = mean(price_performance_three_months, na.rm = TRUE),
+            voo_med = mean(voo_performance_three_months, na.rm = TRUE),
+            gov_long = mean(price_performance_one_year, na.rm = TRUE),
+            voo_long = mean(voo_performance_one_year, na.rm = TRUE)) %>%
+  pivot_longer(cols = 2:7, names_to = "trader", values_to = "values") %>% 
+  mutate(trader_cat = ifelse(startsWith(trader, "gov"), "Representative", "S&P 500"),
+         type_cat = case_when(endsWith(trader, "short") ~ "Short",
+                              endsWith(trader, "med") ~ "Medium",
+                              endsWith(trader, "long") ~ "Long")) %>%
+  group_by(trader_cat) %>%
+  filter(type_cat == "Short") %>%
+  summarise(values = mean(values), type = "buy") %>%
+  mutate(rank = ifelse(type == "buy", rank(-values), rank(values)),
+         winner = ifelse(rank == 1,"Winner", "Loser")) %>%
+  ggplot(aes(x=trader_cat, y=values, fill = winner)) + 
+  geom_col(aes(linewidth = 4)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x=element_blank(), y = element_blank()) + 
+  ggtitle("Buy Timing Performance") +
+  geom_text(aes(label = paste0(round(values * 100, 2), "%")), 
+            vjust = -1) +
+  theme(legend.background = element_rect(fill = "#ECF0F5"),
+        panel.background = element_rect(fill = "#ECF0F5"),
+        plot.background = element_rect(fill = "#ECF0F5"),
+        panel.grid.minor = element_blank(), 
+        panel.grid.major = element_blank(),
+        legend.position = "none") +
+  scale_fill_manual(values = pal)
 
 
 
