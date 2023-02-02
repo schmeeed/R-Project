@@ -7,6 +7,7 @@ library(ggplot2)
 library(data.table)
 library(zoo)
 library(scales)
+library(treemap)
 
 
 
@@ -19,6 +20,8 @@ gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "s
 gov_trades <- gov_trades %>%
   mutate(disclosure_date = as.Date(disclosure_date),
                       transaction_date = as.Date(transaction_date))
+
+
 colnames(gov_trades)
 
 get_representatives <- function(state_choice) {
@@ -41,10 +44,12 @@ ui <- dashboardPage(
     ),
     selectInput(inputId = "stateinputid",
                 label = "State",
-                choices = gov_trades %>% arrange(state) %>% select(state) %>% distinct()),
+                choices = gov_trades %>% arrange(state) %>% select(state) %>% distinct(),
+                selected = "GA"),
     selectInput(inputId = "repsinputid",
                 label = "Representative",
-                choices = gov_trades %>% arrange(last_name) %>% select(representative) %>% distinct())
+                choices = gov_trades %>% arrange(last_name) %>% select(representative) %>% distinct(),
+                selected = "Richard W. Allen")
   ),
   dashboardBody(
     tabsetPanel(
@@ -58,8 +63,6 @@ ui <- dashboardPage(
                                        ),
                                column(width = 6,
                                       valueBoxOutput("sold_count", width = "50%"))
-                               
-
                                ),
                         column(width = 12,
                                valueBoxOutput("rep_party", width = "100%"))
@@ -68,12 +71,21 @@ ui <- dashboardPage(
                         plotOutput("trade_activity")
                         )
                  ),
-               fluidRow(
-                 column(width = 12,
-                        plotOutput("buy_perf"),
-                        plotOutput("sell_perf")
-                        )
-               )
+               fluidRow(style = "height:800px;",
+                 column(width = 4, 
+                        plotOutput("timing_perf")
+                        ),
+                 column(width = 2, 
+                        radioButtons("radio_buy_sell", label = h3(""), inline = TRUE,
+                                     choices = list("Buy" = "buy", "Sell" = "sell"), 
+                                     selected = "buy"),
+                        radioButtons("radio_short_med_long", label = h3(""), inline = TRUE,
+                                     choices = list("30 Days" = "Short", "90 Days" = "Medium", "365 Days" = "Long"), 
+                                     selected = "Short")
+                        ),
+                 column(width = 6,
+                        plotOutput("treemap"))
+                 )
                ),
       tabPanel("tab panel 2")
       )
@@ -116,6 +128,8 @@ server <- function(input, output, session) {
         filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
         distinct(party)
     })
+    
+    
     
     pal <- c("Winner" = "#01FF70",
              "Loser" = "grey")
@@ -166,17 +180,17 @@ server <- function(input, output, session) {
                 panel.grid.major = element_blank()) +
           geom_text(stat='count', aes(label=after_stat(count)),position=position_stack(vjust=0.5))
         )
-    
-    output$buy_perf <- renderPlot(
+    #### timing_perf ####
+    output$timing_perf <- renderPlot(
       gov_trades %>%
-        filter((state == input$stateinputid) & (representative == input$repsinputid) & (type == "buy")) %>%
+        filter((state == input$stateinputid) & (representative == input$repsinputid) & (type == input$radio_buy_sell)) %>%
         mutate(price_performance_one_month = (price_one_month-price)/price,
                price_performance_three_months = (price_three_months-price)/price,
                price_performance_one_year = (price_one_year-price)/price,
                voo_performance_one_month = (voo_one_month-voo)/price,
                voo_performance_three_months = (voo_three_months-voo)/price,
                voo_performance_one_year = (voo_one_year-voo)/price) %>%
-        summarise(type = "buy",
+        summarise((type = input$radio_buy_sell),
                   gov_short = mean(price_performance_one_month, na.rm = TRUE),
                   voo_short = mean(voo_performance_one_month, na.rm = TRUE),
                   gov_med = mean(price_performance_three_months, na.rm = TRUE),
@@ -184,19 +198,20 @@ server <- function(input, output, session) {
                   gov_long = mean(price_performance_one_year, na.rm = TRUE),
                   voo_long = mean(voo_performance_one_year, na.rm = TRUE)) %>%
         pivot_longer(cols = 2:7, names_to = "trader", values_to = "values") %>% 
-        mutate(trader_cat = ifelse(startsWith(trader, "gov"), "Government", "S&P 500"),
+        mutate(trader_cat = ifelse(startsWith(trader, "gov"), input$repsinputid, "S&P 500"),
                type_cat = case_when(endsWith(trader, "short") ~ "Short",
                                     endsWith(trader, "med") ~ "Medium",
                                     endsWith(trader, "long") ~ "Long")) %>%
         group_by(trader_cat) %>%
-        summarise(values = mean(values)) %>%
-        mutate(rank = rank(-values),
+        filter(type_cat == input$radio_short_med_long) %>%
+        summarise(values = mean(values), type = input$radio_buy_sell) %>%
+        mutate(rank = ifelse(type == "buy", rank(-values), rank(values)),
                winner = ifelse(rank == 1,"Winner", "Loser")) %>%
         ggplot(aes(x=trader_cat, y=values, fill = winner)) + 
         geom_col(aes(linewidth = 4)) +
         scale_y_continuous(labels = scales::percent) +
         labs(x=element_blank(), y = element_blank()) + 
-        ggtitle("Buy Timing Performance") +
+        ggtitle("Timing Performance") +
         geom_text(aes(label = paste0(round(values * 100, 2), "%")), 
                   vjust = -1) +
         theme(legend.background = element_rect(fill = "#ECF0F5"),
@@ -207,63 +222,24 @@ server <- function(input, output, session) {
               legend.position = "none") +
         scale_fill_manual(values = pal)
       )
-    
-    output$sell_perf <- renderPlot(
-      gov_trades %>%
-        filter((state == input$stateinputid) & (representative == input$repsinputid) & (type == "sell")) %>%
-        mutate(price_performance_one_month = (price_one_month-price)/price,
-               price_performance_three_months = (price_three_months-price)/price,
-               price_performance_one_year = (price_one_year-price)/price,
-               voo_performance_one_month = (voo_one_month-voo)/price,
-               voo_performance_three_months = (voo_three_months-voo)/price,
-               voo_performance_one_year = (voo_one_year-voo)/price) %>%
-        summarise(type = "sell",
-                  gov_short = mean(price_performance_one_month, na.rm = TRUE),
-                  voo_short = mean(voo_performance_one_month, na.rm = TRUE),
-                  gov_med = mean(price_performance_three_months, na.rm = TRUE),
-                  voo_med = mean(voo_performance_three_months, na.rm = TRUE),
-                  gov_long = mean(price_performance_one_year, na.rm = TRUE),
-                  voo_long = mean(voo_performance_one_year, na.rm = TRUE)) %>%
-        pivot_longer(cols = 2:7, names_to = "trader", values_to = "values") %>% 
-        mutate(trader_cat = ifelse(startsWith(trader, "gov"), "Government", "S&P 500"),
-               type_cat = case_when(endsWith(trader, "short") ~ "Short",
-                                    endsWith(trader, "med") ~ "Medium",
-                                    endsWith(trader, "long") ~ "Long")) %>%
-        group_by(trader_cat) %>%
-        summarise(values = mean(values)) %>%
-        mutate(rank = rank(values),
-               winner = ifelse(rank == 1,"Winner", "Loser")) %>%
-        ggplot(aes(x=trader_cat, y=values, fill = winner)) + 
-        geom_col(aes(linewidth = 4)) +
-        scale_y_continuous(labels = scales::percent) +
-        labs(x=element_blank(), y = element_blank()) + 
-        ggtitle("Sell Timing Performance") +
-        geom_text(aes(label = paste0(round(values * 100, 2), "%")), 
-                  vjust = -1) +
-        theme(legend.background = element_rect(fill = "#ECF0F5"),
-              panel.background = element_rect(fill = "#ECF0F5"),
-              plot.background = element_rect(fill = "#ECF0F5"),
-              panel.grid.minor = element_blank(), 
-              panel.grid.major = element_blank(),
-              legend.position = "none") +
-        scale_fill_manual(values = pal)
+    #### treemap ####
+    output$treemap <- renderPlot(
+      gov_trades %>% 
+        filter((state == input$stateinputid) & (representative == input$repsinputid) & (type == input$radio_buy_sell)) %>%
+        mutate(price_return_one_month = (price_one_month-price)/price,
+               price_return_three_months = (price_three_months-price)/price,
+               price_return_one_year = (price_one_year-price)/price,
+               voo_return_one_month = (voo_one_month-voo)/voo,
+               voo_return_three_months = (voo_three_months-voo)/voo,
+               voo_return_one_year = (voo_one_year-voo)/voo) %>%
+        treemap(index= c("sector","ticker"),
+                vSize="lower_bound",
+                vColor = "price_return_one_month",
+                type = "value",
+                title="Stocks by Sector",
+                fontsize.title=20)
     )
-    
-    
-
-    
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+   
     
 }
 
