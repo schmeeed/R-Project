@@ -417,7 +417,8 @@ write.csv(reps,
 ###########################
 #FAILED EXPLORATION CODE
 
-
+# gov_trades %>%
+#   filter((representative == "Virginia Foxx") & (ticker == "BP"))
 
 
 # tq_get("AAPL", get = "stock.prices", from = "2015-01-01",adjusted = TRUE)
