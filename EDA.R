@@ -253,23 +253,177 @@ economic_indic <- read.csv("https://brian-ralston-r-project.s3.amazonaws.com/eco
 
 
 #### Trade Activity - APP ####
-
+VOO <- read.csv(file = "data/RAW-VOO.csv")
 library(zoo)
 library(scales)
 
-gov_trades %>%
-  filter(representative == "Nancy Pelosi") %>%
-  mutate(transaction_date = as.Date(transaction_date)) %>%
-  arrange(transaction_date) %>%
-  mutate(quarter_year = format(as.yearqtr(transaction_date, format = "%Y-%m-%d"), "%Y Q%q")) %>%
-  ggplot(aes(x = quarter_year, fill = type)) + 
-  geom_histogram(aes(fill=type), stat = "count", color = "black") + 
+
+rep_plot <- geom_bar(data = rep_data, aes(x = quarter_year, fill = type)) + 
   scale_fill_manual(values = c("buy" = "#00BA38", "sell" = "#F8766D")) +
   scale_x_discrete(limits = unique(gov_trades$quarter_year)) + 
+  scale_y_continuous(sec.axis = sec_axis(~ . * 10, name = "S&P500")) +
   labs(x=element_blank(), y = element_blank()) + 
   ggtitle("Trade Activity") +
   theme(panel.background = element_rect(fill = "white"), panel.grid.minor = element_blank(), panel.grid.major = element_blank()) +
   geom_text(stat='count', aes(label=..count..),position=position_stack(vjust=0.5))
+
+VOO_data <- VOO %>%
+  filter(ref_date >= min(rep_data$transaction_date),ref_date <= max(rep_data$transaction_date)) %>%
+  mutate( ref_date = as.Date(ref_date),quarter_year = format(as.yearqtr(ref_date, format = "%Y-%m-%d"), "%Y Q%q"))
+voo_plot <- ggplot() + geom_line(data = VOO_data, aes(x=ref_date, y = price_adjusted, group = 1)) + 
+  scale_x_date(date_breaks = "3 months", date_labels = "%b-%y")
+
+
+
+gov_trades %>%
+  filter((state == "CA") & (representative == "Nancy Pelosi")) %>%
+  mutate(transaction_date = as.Date(transaction_date)) %>%
+  arrange(transaction_date) %>%
+  mutate(quarter = as.yearqtr(transaction_date, format = "%q"),
+         month = format(transaction_date, "%m-%Y")) %>%
+  group_by(month, type) %>%
+  count() %>%
+  ggplot() +
+  geom_col(aes(x=month, y = n, fill = type)) +
+  geom_line(data = VOO_data, aes(x=ref_date, y = price_adjusted, group = 1))
+
+rep_data <- gov_trades %>%
+  filter((state == "CA") & (representative == "Nancy Pelosi")) %>%
+  mutate(transaction_date = as.Date(transaction_date)) %>%
+  arrange(transaction_date) %>%
+  mutate(quarter = as.yearqtr(transaction_date, format = "%q"),
+         month = format(transaction_date, "%m-%Y"))
+
+
+
+VOO_data %>% 
+  full_join(y=rep_data, by = c("ref_date" = "transaction_date"),keep = TRUE) %>%
+  ggplot() +
+  geom_line(aes(x=ref_date, y = price_adjusted, group = 1)) +
+  geom_bar(aes(x=transaction_date, color = type)) +
+  scale_y_continuous(sec.axis = sec_axis(~./1000, name = "rep_data"))
+
+rep_data_clean <- rep_data %>% 
+  filter(!is.na(rep_data)) %>% 
+  filter(!is.infinite(rep_data))
+
+joined_data <- VOO_data %>% 
+  full_join(y=rep_data, by = c("ref_date" = "transaction_date"),keep = TRUE) 
+
+joined_data  %>%
+  ggplot() +
+  geom_line(aes(x=ref_date, y = price_adjusted, group = 1)) +
+  geom_point(aes(x=transaction_date, y=price_adjusted, color = type))
+
+
+  geom_bar(aes(x=transaction_date, fill = type)) +
+  scale_y_continuous(name = "price_adjusted", limits = c(min(VOO_data$price_adjusted), max(VOO_data$price_adjusted))) +
+  scale_y_continuous(limits = c(0, max(joined_data)), sec.axis = sec_axis(~ ., name = "rep_data"))
+
+
+
+  
+
+  ggplot() + 
+  geom_bar(aes(x = transaction_date, fill = type)) + 
+  scale_fill_manual(values = c("buy" = "#01FF70", "sell" = "#DD4B39")) +
+  scale_x_discrete(limits = unique(gov_trades$quarter_year)) + 
+  
+  ggtitle("Trade Activity") +
+  theme(legend.background = element_rect(fill = "#ECF0F5"),
+        panel.background = element_rect(fill = "#ECF0F5"),
+        plot.background = element_rect(fill = "#ECF0F5"),
+        panel.grid.minor = element_blank(), 
+        panel.grid.major = element_blank()) +
+  geom_text(stat='count', aes(label=after_stat(count)),position=position_stack(vjust=0.5))
+
+#### Top 5 Stocks Visual####
+  install.packages("gghighlight")
+  library(gghighlight) 
+
+  rep_top_tickers <- gov_trades %>%
+  filter((state == "CA") & (representative == "Nancy Pelosi")) %>%
+  mutate(transaction_date = as.Date(transaction_date)) %>%
+  group_by(ticker) %>%
+  count() %>% 
+  arrange(desc(n)) %>%
+  head(5) %>%
+    as.vector()
+  
+  class(rep_top_tickers)
+
+  rep_top_tickers %>% 
+    ggplot(aes(x=reorder(ticker, n), y = n, color = ticker, label = paste0(ticker," (",n,")"))) +
+    geom_segment(aes(xend = ticker, yend = 0)) +
+    geom_point(size = 4) +
+    scale_y_continuous(limits = c(0,max(top_5_stocks$n)*1.2)) +
+    ggtitle("Top 5 Stocks") +
+    theme(legend.background = element_rect(fill = "#ECF0F5"),
+          panel.background = element_rect(fill = "#ECF0F5"),
+          plot.background = element_rect(fill = "#ECF0F5"),
+          panel.grid.minor = element_blank(), 
+          panel.grid.major = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank()) +
+    labs(x=element_blank(), y = element_blank()) +
+    geom_text(hjust = -.5) +
+    theme(legend.position="none") +
+    coord_flip()
+  
+  #### top_5_sectors visual####  
+  
+  rep_top_sectors <- gov_trades %>%
+    filter((state == "CA") & (representative == "Nancy Pelosi")) %>%
+    mutate(transaction_date = as.Date(transaction_date)) %>%
+    group_by(sector) %>%
+    count() %>% 
+    arrange(desc(n)) %>%
+    head(5)
+  
+  rep_top_sectors %>% 
+    ggplot(aes(x=reorder(sector, n), y = n, color = sector, label = paste0(sector," (",n,")"))) +
+    geom_segment(aes(xend = sector, yend = 0)) +
+    geom_point(size = 4) +
+    scale_y_continuous(limits = c(0,max(rep_top_sectors$n)*1.2)) +
+    ggtitle("Top 5 Stocks") +
+    theme(legend.background = element_rect(fill = "#ECF0F5"),
+          panel.background = element_rect(fill = "#ECF0F5"),
+          plot.background = element_rect(fill = "#ECF0F5"),
+          panel.grid.minor = element_blank(), 
+          panel.grid.major = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank()) +
+    labs(x=element_blank(), y = element_blank()) +
+    geom_text(hjust = -.5) +
+    theme(legend.position="none") +
+    coord_flip()
+
+  #### top stocks visuals ####  
+  stocks %>%
+    filter(ticker %in% c(rep_top_tickers[["ticker"]])) %>%
+    # select(ticker) %>%
+    # unique() %>%
+    # as.vector()
+    # 
+    # ggplot(aes(x=ref_date, y= price_adjusted, group = ticker)) +
+    # geom_line()
+    # 
+    left_join(y=rep_data, by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
+    group_by(ticker.x) %>%
+    filter(ref_date >= (min(rep_data$transaction_date)-30), ref_date <= (max(rep_data$transaction_date)+30)) %>%
+    ggplot() +
+    geom_line(aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
+    geom_point(aes(x=transaction_date, y=price_adjusted, shape = type)) +
+    theme(legend.background = element_rect(fill = "#ECF0F5"),
+          panel.background = element_rect(fill = "#ECF0F5"),
+          plot.background = element_rect(fill = "#ECF0F5"),
+          panel.grid.minor = element_blank(), 
+          panel.grid.major = element_blank()) +
+    labs(x=element_blank(), y = element_blank())
 
 
 #### Trader Performance - APP ####
@@ -474,7 +628,6 @@ gov_trades %>%
   mutate(price_performance_one_month = (price_one_month-price)/price,
          price_performance_three_months = (price_three_months-price)/price,
          price_performance_one_year = (price_one_year-price)/price,
-         voo_performance_one_month = (voo_one_month-voo)/price,
          voo_performance_three_months = (voo_three_months-voo)/price,
          voo_performance_one_year = (voo_one_year-voo)/price) %>%
   summarise(type = "buy",

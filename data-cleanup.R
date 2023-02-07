@@ -409,6 +409,9 @@ write.csv(report_days,
 write.csv(reps,
           file = "data/CLEAN-representatives-unique.csv",
           row.names = FALSE)
+write.csv(VOO,
+          file = 'data/RAW-VOO.csv',
+          row.names = FALSE)
 
 
 

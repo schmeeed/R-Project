@@ -8,12 +8,18 @@ library(data.table)
 library(zoo)
 library(scales)
 library(treemap)
+library(gghighlight) 
+
 
 
 
 setwd("/Users/bschmidt/Library/CloudStorage/GoogleDrive-schmidt5364@gmail.com/My\ Drive/#NYC_Data_Science_Academy/Projects/R-Project")
 
-gov_trades <- fread(file = "data/CLEAN-gov-trades.csv")
+gov_trades <- read.csv(file = "data/CLEAN-gov-trades.csv")
+VOO <- read.csv(file = "data/RAW-VOO.csv")
+stocks <- read.csv(file = "data/CLEAN-stocks-data.csv")
+stocks$ref_date <- as.Date(stocks$ref_date)
+
 # group all types of sell and buys into either "buy" or "sell"
 gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "sale_full", "sale"), "sell", type),
                                     type = ifelse(type=="purchase", "buy", type))
@@ -22,10 +28,8 @@ gov_trades <- gov_trades %>%
          transaction_date = as.Date(transaction_date))
 
 
-colnames(gov_trades)
-
 get_representatives <- function(state_choice) {
-  reps <- gov_trades[gov_trades$state == state_choice]
+  reps <- gov_trades[gov_trades$state == state_choice,]
   reps2 <- reps %>% arrange(last_name) %>% select(representative) %>% distinct()
   return(reps2)
 }
@@ -57,27 +61,43 @@ ui <- dashboardPage(
     tabsetPanel(
       tabPanel("tab panel 1",
                fluidRow(
-                 column(width = 4,
-                        column(width = 12,
-                               valueBoxOutput("trade_count", width = "100%"),
-                               column(width = 6,
-                                      valueBoxOutput("bought_count", width = "50%")
-                               ),
-                               column(width = 6,
-                                      valueBoxOutput("sold_count", width = "50%"))
-                        ),
-                        column(width = 12,
-                               valueBoxOutput("vol_range", width = "100%"),
-                               valueBoxOutput("rep_party", width = "100%")),
+                 column(width = 2,
+                        valueBoxOutput("trade_count", width = "100%")
                  ),
-                 column(width = 8,
-                        plotOutput("trade_activity")
+                 column(width = 4,
+                        valueBoxOutput("vol_range", width = "100%")
+                 ),
+                 column(width = 1,
+                        valueBoxOutput("bought_count", width = "25%")
+                 ),
+                 column(width = 1,
+                        valueBoxOutput("sold_count", width = "25%")
+                 ),
+                 column(width = 3, 
+                        valueBoxOutput("rep_party", width = "100%")
+                 )
+               ),
+               fluidRow(
+                 column(width = 9,
+                        plotOutput("trade_activity", height = "400px")
+                 ),
+                 column(width = 3, height = "400px",
+                        fluidRow(
+                          column(width = 12,
+                                 plotOutput("top_5_stocks", height = "200px")
+                          )
+                        ),
+                        fluidRow(
+                          column(width = 12,
+                                 plotOutput("top_5_sectors", height = "200px")
+                          )
+                        )
                  )
                ),
                fluidRow(
                  column(width = 4, div(style = "height:800px;", plotOutput("timing_perf")),
-                        
                  ),
+                 column(width = 8, dataTableOutput("top_stocks_viz")),
                  column(width = 2,
                         radioButtons("radio_buy_sell", label = h3(""), inline = TRUE,
                                      choices = list("Buy" = "buy", "Sell" = "sell"),
@@ -97,6 +117,7 @@ ui <- dashboardPage(
       tabPanel("tab panel 2")
     )
   )
+  
 )
 
 
@@ -144,14 +165,123 @@ server <- function(input, output, session) {
                 upper_bound = sum(upper_bound))
   })
   
+
+  rep_top_sectors <- reactive({
+    gov_trades %>%
+      filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
+      mutate(transaction_date = as.Date(transaction_date)) %>%
+      group_by(sector) %>%
+      count() %>% 
+      arrange(desc(n)) %>%
+      head(5)
+  })
+  rep_top_tickers <- reactive({
+    gov_trades %>%
+      filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
+      mutate(transaction_date = as.Date(transaction_date)) %>%
+      group_by(ticker) %>%
+      count() %>% 
+      arrange(desc(n)) %>%
+      head(5)
+  })
+  
+  rep_top_sectors <- reactive({
+    gov_trades %>%
+      filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
+      mutate(transaction_date = as.Date(transaction_date)) %>%
+      group_by(sector) %>%
+      count() %>% 
+      arrange(desc(n)) %>%
+      head(5)
+  })
+
+  
+   
+  stocks_filtered <- stocks %>%
+    filter(ticker %in% as.vector(rep_top_tickers))
+    select(ticker) %>%
+    unique() %>%
+    as.vector()
+
   
   pal <- c("Winner" = "#01FF70",
            "Loser" = "grey")
   #### OUTPUTS ####
+  
+  #### top_stocks_viz ####
+
+  
+  output$top_stocks_viz <- renderDataTable(
+    stocks_filtered()
+
+    # ggplot(aes(x=ref_date, y= price_adjusted, group = ticker)) +
+    #   geom_line()
+
+    #   left_join(y=filtered_count(), by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
+    #   group_by(ticker.x) %>%
+    #   filter(ref_date >= (min(filtered_count()[["transaction_date"]])-30), ref_date <= (max(filtered_count()[["transaction_date"]])+30)) %>%
+    #   ggplot() +
+    #   geom_line(aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
+    #   geom_point(aes(x=transaction_date, y=price_adjusted, shape = type)) +
+    #   theme(legend.background = element_rect(fill = "#ECF0F5"),
+    #         panel.background = element_rect(fill = "#ECF0F5"),
+    #         plot.background = element_rect(fill = "#ECF0F5"),
+    #         panel.grid.minor = element_blank(),
+    #         panel.grid.major = element_blank()) +
+    #   labs(x=element_blank(), y = element_blank())
+  )
+
+  #### top_5_stocks ####
+  output$top_5_stocks <-renderPlot(
+    rep_top_tickers() %>% 
+    ggplot(aes(x=reorder(ticker, n), y = n, color = ticker, label = paste0(ticker," (",n,")"))) +
+    geom_segment(aes(xend = ticker, yend = 0)) +
+    geom_point(size = 4) +
+    scale_y_continuous(limits = c(0,max(rep_top_tickers()$n)*1.6)) +
+    ggtitle("Top 5 Stocks") +
+    theme(legend.background = element_rect(fill = "#ECF0F5"),
+          panel.background = element_rect(fill = "#ECF0F5"),
+          plot.background = element_rect(fill = "#ECF0F5"),
+          panel.grid.minor = element_blank(), 
+          panel.grid.major = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank()) +
+    labs(x=element_blank(), y = element_blank()) +
+    geom_text(hjust = -.3) +
+    theme(legend.position="none") +
+    coord_flip()
+    )
+  
+
+  output$top_5_sectors <- renderPlot(
+    rep_top_sectors() %>% 
+      ggplot(aes(x=reorder(sector, n), y = n, color = sector, label = paste0(sector," (",n,")"))) +
+      geom_segment(aes(xend = sector, yend = 0)) +
+      geom_point(size = 4) +
+      scale_y_continuous(limits = c(0,max(rep_top_sectors()$n)*1.7)) +
+      ggtitle("Top 5 Sectors") +
+      theme(legend.background = element_rect(fill = "#ECF0F5"),
+            panel.background = element_rect(fill = "#ECF0F5"),
+            plot.background = element_rect(fill = "#ECF0F5"),
+            panel.grid.minor = element_blank(), 
+            panel.grid.major = element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank(),
+            axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
+      labs(x=element_blank(), y = element_blank()) +
+      geom_text(hjust = -.3) +
+      theme(legend.position="none") +
+      coord_flip()
+  )
+  
+  
   #### Value Boxes ####
   output$vol_range <- renderValueBox({
     valueBox(paste0("$", prettyNum(filter_range()[[1]], big.mark = ","), " - ", "$", prettyNum(filter_range()[[2]], big.mark = ",")), # ,scales::dollar(filter_range()[2])
-             "Range", icon = icon("bank"), color = "green")
+             "Volume", icon = icon("dollar"), color = "green")
   })
   
   output$trade_count <- renderValueBox({
@@ -181,6 +311,9 @@ server <- function(input, output, session) {
                     "Democrat" = "blue")
     valueBox(party, "Party", icon = icon, color = color)
   })
+
+  
+  #### Trade Activity ####
   output$trade_activity <- renderPlot(
     gov_trades %>%
       filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
@@ -188,7 +321,7 @@ server <- function(input, output, session) {
       arrange(transaction_date) %>%
       mutate(quarter_year = format(as.yearqtr(transaction_date, format = "%Y-%m-%d"), "%Y Q%q")) %>%
       ggplot(aes(x = quarter_year, fill = type)) + 
-      geom_histogram(aes(fill=type), stat = "count", color = "black") + 
+      geom_bar() + 
       scale_fill_manual(values = c("buy" = "#01FF70", "sell" = "#DD4B39")) +
       scale_x_discrete(limits = unique(gov_trades$quarter_year)) + 
       labs(x=element_blank(), y = element_blank()) + 
