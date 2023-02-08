@@ -347,8 +347,7 @@ joined_data  %>%
   group_by(ticker) %>%
   count() %>% 
   arrange(desc(n)) %>%
-  head(5) %>%
-    as.vector()
+  head(5)
   
   class(rep_top_tickers)
 
@@ -403,29 +402,48 @@ joined_data  %>%
     coord_flip()
 
   #### top stocks visuals ####  
-  stocks %>%
-    filter(ticker %in% c(rep_top_tickers[["ticker"]])) %>%
-    # select(ticker) %>%
-    # unique() %>%
-    # as.vector()
-    # 
-    # ggplot(aes(x=ref_date, y= price_adjusted, group = ticker)) +
-    # geom_line()
-    # 
+  d1 <- stocks %>%
+    filter(ticker %in% c(rep_top_tickers$ticker)) %>%
     left_join(y=rep_data, by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
     group_by(ticker.x) %>%
-    filter(ref_date >= (min(rep_data$transaction_date)-30), ref_date <= (max(rep_data$transaction_date)+30)) %>%
-    ggplot() +
-    geom_line(aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
-    geom_point(aes(x=transaction_date, y=price_adjusted, shape = type)) +
+    filter(ref_date >= (min(rep_data$transaction_date)-30), ref_date <= (max(rep_data$transaction_date)+30))
+  d2 <- highlight_key(d1, ~ticker.x)
+  p <- ggplot(d2, aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
+    geom_line() +
+    geom_point(aes(x=transaction_date, y=price_adjusted, shape = type, size = 12, color = ticker.x)) +
     theme(legend.background = element_rect(fill = "#ECF0F5"),
           panel.background = element_rect(fill = "#ECF0F5"),
           plot.background = element_rect(fill = "#ECF0F5"),
           panel.grid.minor = element_blank(), 
           panel.grid.major = element_blank()) +
     labs(x=element_blank(), y = element_blank())
+  cols2 <- toRGB(RColorBrewer::brewer.pal(3, "Dark2"), 0.5)
+  gg <- ggplotly(p, tooltip = "ticker.x")
+  highlight(gg, on = "plotly_hover", color = cols2, dynamic = TRUE, debounce = 50)
 
-
+  
+  
+  ##PLOTLY EXAMPLE ##
+  
+  d <- highlight_key(txhousing, ~city)
+  p <- ggplot(d, aes(date, median, group = city)) + geom_line()
+  gg <- ggplotly(p, tooltip = "city") 
+  highlight(gg, dynamic = TRUE)
+  
+  # supply custom colors to the brush 
+  cols <- toRGB(RColorBrewer::brewer.pal(3, "Dark2"), 0.5)
+  highlight(gg, on = "plotly_hover", color = cols, dynamic = TRUE)
+  
+  # Use attrs_selected() for complete control over the selection appearance
+  # note any relevant colors you specify here should override the color argument
+  s <- attrs_selected(
+    showlegend = TRUE,
+    mode = "lines+markers",
+    marker = list(symbol = "x")
+  )
+  
+  highlight(layout(gg, showlegend = TRUE), selected = s)
+  
 #### Trader Performance - APP ####
 
 buy_perf_avg <- gov_trades %>%
