@@ -9,6 +9,7 @@ library(zoo)
 library(scales)
 library(treemap)
 library(gghighlight) 
+library(plotly)
 
 
 
@@ -228,7 +229,9 @@ server <- function(input, output, session) {
       left_join(y=filtered_count(), by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
       group_by(ticker.x) %>%
       filter(ref_date >= (min(filtered_count()[["transaction_date"]])-30), ref_date <= (max(filtered_count()[["transaction_date"]])+30))
+    
     d2 <- highlight_key(d1, ~ticker.x)
+    
     p <- ggplot(d2, aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
       geom_line() +
       geom_point(aes(x=transaction_date, y=price_adjusted, shape = type, size = 12, color = ticker.x)) +
@@ -238,9 +241,14 @@ server <- function(input, output, session) {
             panel.grid.minor = element_blank(),
             panel.grid.major = element_blank()) +
       labs(x=element_blank(), y = element_blank())
+    
     cols2 <- toRGB(RColorBrewer::brewer.pal(3, "Dark2"), 0.5)
-    gg <- ggplotly(p, tooltip = "ticker.x")
-    highlight(gg, on = "plotly_hover", color = cols2, dynamic = TRUE, debounce = 50)
+    
+    gg <- ggplotly(p)
+    
+    hh <- highlight(gg, on = "plotly_hover", color = cols2, dynamic = TRUE, debounce = 50)
+    
+    # add_trace(hh, y = d1$price_adjusted)
   })
   
   
