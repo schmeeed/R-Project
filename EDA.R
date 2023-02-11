@@ -14,7 +14,42 @@ gov_trades <- gov_trades %>% mutate(disclosure_date = as.Date(disclosure_date),
                       transaction_date = as.Date(transaction_date))
 
 summary(gov_trades)
+format(com_filt_gov_trades$transaction_date, "%Y")
 
+#### committees ####
+com_filt_gov_trades <- gov_trades %>%
+  filter((state == "CT") & (representative == "Joe Courtney"))
+
+com_filt_gov_trades["transaction_date"] <- com_filt_gov_trades[format(com_filt_gov_trades$transaction_date, "%Y") == 2020,] %>%
+  left_join(y=committee_2020, by = c("first_name" = "first_name", "last_name" = "last_name")) %>%
+  select(-middle_name.y, - full_name.y)
+
+temp <- gov_trades %>% filter((state == "CA") & (representative == "Nancy Pelosi")) %>% left_join(committee_2020, by = c("first_name" = "first_name", "last_name" = "last_name"))
+num1 <- ncol(temp)
+col_names1 <- colnames(temp)[34:(num1)]
+col_indices1 <- which(colnames(temp) %in% col_names1)
+temp %>% filter(format(temp$transaction_date, "%Y")==2020)
+temp[format(temp$transaction_date, "%Y") %in% c(2021,2022),34:num1]
+
+
+temp <- mutate_at(temp, vars(col_indices1), ifelse(format(temp$transaction_date, "%Y")==2020, temp$transaction_date, NA))
+
+
+
+
+
+
+  #2021
+  left_join(y=committee_2021, by = c("first_name" = "first_name", "last_name" = "last_name")) %>%
+  select(-middle_name, - full_name) %>%
+  #2022
+  left_join(y=committee_2022, by = c("first_name" = "first_name", "last_name" = "last_name")) %>%
+  select(-middle_name, - full_name)
+
+
+  
+  
+  
 ####AVERAGE DELAY BETWEEN REPORTING AND TRADING#####
 gov_trades %>%
   mutate(delay = disclosure_date - transaction_date) %>%
@@ -639,7 +674,6 @@ gov_trades %>%
 
 pal <- c("Winner" = "#01FF70",
          "Loser" = "grey")
-
 
 gov_trades %>%
   filter((state == "CA") & (representative == "Zoe Lofgren") & (type == "buy")) %>%

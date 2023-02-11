@@ -322,24 +322,52 @@ committee_2020$Committee.Assignment_Collapsed <- sapply(str_split(committee_2020
 committee_2021$Committee.Assignment_Collapsed <- sapply(str_split(committee_2021$Committee.Assignment, "(?<=[a-z])(?=[A-Z])"), function(x) paste(x, collapse = ":"))
 committee_2022$Committee.Assignment_Collapsed <- sapply(str_split(committee_2022$Committee.Assignment, "(?<=[a-z])(?=[A-Z])"), function(x) paste(x, collapse = ":"))
 
+## NOT Dumified version
+library(humaniformat)
+committee_2020_long <- committee_2020 %>% 
+  select(-Committee.Assignment) %>% 
+  separate_rows(Committee.Assignment_Collapsed, sep = ":") %>%
+  mutate(year = 2020)
+committee_2021_long <- committee_2021 %>% 
+  select(-Committee.Assignment) %>% 
+  separate_rows(Committee.Assignment_Collapsed, sep = ":") %>%
+  mutate(year = 2021)
+committee_2022_long <- committee_2022 %>% 
+  select(-Committee.Assignment) %>% 
+  separate_rows(Committee.Assignment_Collapsed, sep = ":") %>%
+  mutate(year = 2022)
+
+committees <- bind_rows(committee_2020_long, committee_2021_long, committee_2022_long)
+committees$Name <- format_period(committees$Name)
+committees$Name <- format_reverse(committees$Name)
+committees <- committees %>% mutate(parse_names(committees$Name))
+#rename one column
+colnames(committees)[colnames(committees)=="Committee.Assignment_Collapsed"] <- "committee" 
+#delete NA
+committees <- committees %>% filter(!committee == "")
+
+committees %>% filter(grepl("Susan A. Davis", full_name, ignore.case = TRUE))
+
+
+
 ## DUMIFY Rows into columns binary
 #install.packages("fastDummies")
 library(fastDummies)
 
 committee_2020 <- committee_2020 %>% 
-  rename(c = Committee.Assignment_Collapsed) %>%
+  rename(c2020 = Committee.Assignment_Collapsed) %>%
   select(-Committee.Assignment) %>%
-  dummy_cols(split = ":", select_columns = "c", remove_selected_columns = TRUE)
+  dummy_cols(split = ":", select_columns = "c2020", remove_selected_columns = TRUE)
 
 committee_2021 <- committee_2021 %>% 
-  rename(c = Committee.Assignment_Collapsed) %>%
+  rename(c2021 = Committee.Assignment_Collapsed) %>%
   select(-Committee.Assignment) %>%
-  dummy_cols(split = ":", select_columns = "c", remove_selected_columns = TRUE)
+  dummy_cols(split = ":", select_columns = "c2021", remove_selected_columns = TRUE)
 
 committee_2022 <- committee_2022 %>% 
-  rename(c = Committee.Assignment_Collapsed) %>%
+  rename(c2022 = Committee.Assignment_Collapsed) %>%
   select(-Committee.Assignment) %>%
-  dummy_cols(split = ":", select_columns = "c", remove_selected_columns = TRUE)
+  dummy_cols(split = ":", select_columns = "c2022", remove_selected_columns = TRUE)
 
 
 ## FORMAT REPRESENTATIVE NAMES and temporarily append first, middle, last, etc columns
@@ -350,21 +378,24 @@ library(humaniformat)
 ## Format Names to prepare for merging
 committee_2020$Name <- format_period(committee_2020$Name)
 committee_2020$Name <- format_reverse(committee_2020$Name)
-committee_2020 <- committee_2020 %>% mutate(parse_names(committee_2020$Name))
-# Remove extraneous columns
-committee_2020 <- committee_2020 %>% select(-Phone, -District, -Name, -Party, -Office.Room, -salutation, -middle_name, -suffix, -full_name)
+committee_2020 <- committee_2020 %>% mutate(parse_names(committee_2020$Name)) 
+committee_2020 <- committee_2020 %>% select(tail(names(committee_2020),5),everything())
+# Remove extraneous columns and reorder
+committee_2020 <- committee_2020 %>% select(-Phone, -District, -Name, -Party, -Office.Room, -salutation, -suffix)
 
 committee_2021$Name <- format_period(committee_2021$Name)
 committee_2021$Name <- format_reverse(committee_2021$Name)
 committee_2021 <- committee_2021 %>% mutate(parse_names(committee_2021$Name))
-# Remove extraneous columns
-committee_2021 <- committee_2021 %>% select(-Phone, -District, -Name, -Party, -Office.Room, -salutation, -middle_name, -suffix, -full_name)
+committee_2021 <- committee_2021 %>% select(tail(names(committee_2021),5),everything())
+# Remove extraneous columns and reorder
+committee_2021 <- committee_2021 %>% select(-Phone, -District, -Name, -Party, -Office.Room, -salutation, -suffix)
 
 committee_2022$Name <- format_period(committee_2022$Name)
 committee_2022$Name <- format_reverse(committee_2022$Name)
 committee_2022 <- committee_2022 %>% mutate(parse_names(committee_2022$Name))
-# Remove extraneous columns
-committee_2022 <- committee_2022 %>% select(-Phone, -District, -Name, -Party, -Office.Room, -salutation, -middle_name, -suffix, -full_name)
+committee_2022 <- committee_2022 %>% select(tail(names(committee_2022),5),everything())
+# Remove extraneous columns and reorder
+committee_2022 <- committee_2022 %>% select(-Phone, -District, -Name, -Party, -Office.Room, -salutation, -suffix)
 
 gov_trades$representative <- format_period(gov_trades$representative)
 gov_trades <- gov_trades %>% mutate(parse_names(gov_trades$representative))
@@ -411,6 +442,9 @@ write.csv(reps,
           row.names = FALSE)
 write.csv(VOO,
           file = 'data/RAW-VOO.csv',
+          row.names = FALSE)
+write.csv(committees,
+          file = "data/CLEAN-committees-all.csv",
           row.names = FALSE)
 
 

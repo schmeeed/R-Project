@@ -10,6 +10,10 @@ library(scales)
 library(treemap)
 library(gghighlight) 
 library(plotly)
+library(humaniformat)
+library(DT)
+
+
 
 
 
@@ -19,6 +23,7 @@ setwd("/Users/bschmidt/Library/CloudStorage/GoogleDrive-schmidt5364@gmail.com/My
 gov_trades <- read.csv(file = "data/CLEAN-gov-trades.csv")
 VOO <- read.csv(file = "data/RAW-VOO.csv")
 stocks <- read_csv(file = "data/CLEAN-stocks-data.csv")
+committees <- read_csv(file = "data/CLEAN-committees-all.csv")
 stocks$ref_date <- as.Date(stocks$ref_date)
 
 # group all types of sell and buys into either "buy" or "sell"
@@ -35,6 +40,7 @@ get_representatives <- function(state_choice) {
   return(reps2)
 }
 
+
 #### UI ####
 library(shinydashboard)
 ui <- dashboardPage(
@@ -43,83 +49,82 @@ ui <- dashboardPage(
     sidebarUserPanel("Brian Ralston",
                      image = "https://www.previewsworld.com/SiteImage/MainImage/STL153704.jpg"),
     sidebarMenu(
-      menuItem("About", tabName = "About", icon = icon("person")),
+      menuItem("About", tabName = "about", icon = icon("person")),
       menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
-      menuItem("Data", tabName = "data", icon = icon("database"))
+      menuItem("Data Table", tabName = "data", icon = icon("database"))
     ),
     selectInput(inputId = "stateinputid",
                 label = "State",
                 choices = gov_trades %>% arrange(state) %>% select(state) %>% distinct(),
-                selected = "GA"),
+                selected = "CA"),
     selectInput(inputId = "repsinputid",
                 label = "Representative",
                 choices = gov_trades %>% arrange(last_name) %>% select(representative) %>% distinct(),
-                selected = "Richard W. Allen")
+                selected = "Zoe Lofgren")
   ),
   
   #### Body ####
   dashboardBody(
-    tabItems(
-      tabItem(tabName = "dashboard",
-              fluidRow(
-                column(width = 3, 
-                       valueBoxOutput("rep_party", width = "100%")
-                ),
-                column(width = 2,
-                       valueBoxOutput("trade_count", width = "100%")
-                ),
-                column(width = 2,
-                       valueBoxOutput("bought_sold_count", width = "25%")
-                ),
-                column(width = 5,
-                       valueBoxOutput("vol_range", width = "100%")
-                )
-              ),
-              fluidRow(
-                column(width = 9,
-                       plotlyOutput("top_stocks_viz", height = "400px")
-                ),
-                column(width = 3, height = "400px",
-                       fluidRow(
-                         column(width = 12,
-                                plotOutput("top_5_stocks", height = "200px")
+      tabItems(
+        tabItem(tabName = "about",
+                fluidRow(column(8, align="center", offset = 2,
+                                box(htmlOutput('intro_header'), htmlOutput('intro_author'), width = 20, 
+                                    background = 'light-blue'),
+                                tags$style(type="text/css", "#string { text-align:center }"))),
+                fluidRow(column(10, align="center", offset = 1,
+                                box(htmlOutput('intro_body1'), div(img(src="david-vives-Nzbkev7SQTg-unsplash.jpg", height=350, width=350)),
+                                    htmlOutput('intro_body2'), 
+                                    htmlOutput('intro_body3'), 
+                                    htmlOutput('intro_body4'), width = 20, background = 'light-blue'),
+                                tags$style(type="text/css", "#string { text-align:justified }")))),
+        tabItem(tabName = "dashboard",
+                fluidRow(column(width = 3, valueBoxOutput("rep_party", width = "100%")),
+                         column(width = 2, valueBoxOutput("trade_count", width = "100%")),
+                         column(width = 2, valueBoxOutput("bought_sold_count", width = "25%")),
+                         column(width = 5, valueBoxOutput("vol_range", width = "100%"))),
+                fluidRow(column(width = 8, plotlyOutput("top_stocks_viz", height = "400px")),
+                  column(width = 4, height = "400px",
+                         fluidRow(
+                           column(width = 12,
+                                  plotOutput("top_5_stocks", height = "200px")
+                           )
+                         ),
+                         fluidRow(
+                           column(width = 12,
+                                  plotOutput("top_5_sectors", height = "200px")
+                           )
                          )
-                       ),
-                       fluidRow(
-                         column(width = 12,
-                                plotOutput("top_5_sectors", height = "200px")
+                  )
+                ),
+                fluidRow(
+                  column(width = 8,
+                         plotOutput("trade_activity")
+                         ),
+                  column(width = 4,
+                         dataTableOutput("committee_table")
                          )
-                       )
+                  ),
+                fluidRow(
+                  column(width = 4, div(style = "height:800px;", plotOutput("timing_perf")),
+                  ),
+                  column(width = 2,
+                         radioButtons("radio_buy_sell", label = h3(""), inline = TRUE,
+                                      choices = list("Buy" = "buy", "Sell" = "sell"),
+                                      selected = "buy"),
+                         radioButtons("radio_short_med_long", label = h3(""), inline = TRUE,
+                                      choices = list("30 Days" = "Short", "90 Days" = "Medium", "365 Days" = "Long"),
+                                      selected = "Short")
+                  ),
+                  column(width = 6,
+                         plotOutput("treemap"))
+                ),
+                fluidRow(
+                  column(width = 12,
+                         )
                 )
-              ),
-              fluidRow(
-                column(width = 12,
-                       plotOutput("trade_activity")
                 ),
-              ),
-              fluidRow(
-                column(width = 4, div(style = "height:800px;", plotOutput("timing_perf")),
-                ),
-                column(width = 2,
-                       radioButtons("radio_buy_sell", label = h3(""), inline = TRUE,
-                                    choices = list("Buy" = "buy", "Sell" = "sell"),
-                                    selected = "buy"),
-                       radioButtons("radio_short_med_long", label = h3(""), inline = TRUE,
-                                    choices = list("30 Days" = "Short", "90 Days" = "Medium", "365 Days" = "Long"),
-                                    selected = "Short")
-                ),
-                column(width = 6,
-                       plotOutput("treemap"))
-              ),
-              fluidRow(
-                column(width = 12,
-                       dataTableOutput("transaction_table"))
-              )
-              )
-    ),
-    tabsetPanel(
-      tabPanel("tab panel 1")
-    )
+        tabItem(tabName = "data",dataTableOutput("transaction_table"))
+      )
   )
 )
 
@@ -131,7 +136,8 @@ server <- function(input, output, session) {
   observe({
     updateSelectInput(session,
                       inputId = "repsinputid",
-                      choices = get_representatives(input$stateinputid) # custom function: defined in global
+                      choices = get_representatives(input$stateinputid),# custom function: defined in global
+                      selected = "Zoe Lofgren" 
     )
   })
   #### DEFINE ####
@@ -167,7 +173,7 @@ server <- function(input, output, session) {
       summarise(lower_bound  = sum(lower_bound),
                 upper_bound = sum(upper_bound))
   })
-  
+
 
   rep_top_sectors <- reactive({
     gov_trades %>%
@@ -175,6 +181,7 @@ server <- function(input, output, session) {
       mutate(transaction_date = as.Date(transaction_date)) %>%
       group_by(sector) %>%
       count() %>% 
+      filter(!is.na(sector)) %>%
       arrange(desc(n)) %>%
       head(5)
   })
@@ -234,19 +241,19 @@ server <- function(input, output, session) {
     
     p <- ggplot(d2, aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
       geom_line() +
-      geom_point(aes(x=transaction_date, y=price_adjusted, shape = type, size = 12, color = ticker.x)) +
+      geom_point(aes(x=transaction_date, shape = type, size = 12)) +
       theme(legend.background = element_rect(fill = "#ECF0F5"),
             panel.background = element_rect(fill = "#ECF0F5"),
             plot.background = element_rect(fill = "#ECF0F5"),
             panel.grid.minor = element_blank(),
             panel.grid.major = element_blank()) +
-      labs(x=element_blank(), y = element_blank())
+      labs(x=element_blank(), y = element_blank()) +
+      ggtitle("Top 5 Stocks Timing")
     
-    cols2 <- toRGB(RColorBrewer::brewer.pal(3, "Dark2"), 0.5)
+    gg <- ggplotly(p, tooltip = c("y", "x"), text = c("Price", "Date")) %>% layout(showlegend = FALSE)
     
-    gg <- ggplotly(p)
     
-    hh <- highlight(gg, on = "plotly_hover", color = cols2, dynamic = TRUE, debounce = 50)
+    highlight(gg, on = "plotly_hover", dynamic = FALSE, debounce = 50)
     
     # add_trace(hh, y = d1$price_adjusted)
   })
@@ -425,6 +432,22 @@ server <- function(input, output, session) {
               title="Stocks by Sector",
               fontsize.title=20)
   )
+  
+  #### Committee Table ####
+  output$committee_table <- renderDataTable({
+    # library(humaniformat)
+    parsed_name_input <- parse_names(input$repsinputid)
+    
+    committees_filtered <- committees %>%
+      filter(committees$first_name == parsed_name_input$first_name, committees$last_name == parsed_name_input$last_name) %>%
+      select(year, committee)
+    
+    datatable(committees_filtered, options = list(list(pageLength = 10, 
+                                                       autoWidth = TRUE, 
+                                                       scrollY = "399px",
+                                                       scrollCollapse = TRUE)))
+  })
+  
   #### transaction table #### 
   output$transaction_table <- renderDataTable(
     gov_trades %>%
@@ -435,6 +458,42 @@ server <- function(input, output, session) {
       select(type, sector, ticker, transaction_date, range, price_on_date, volume_on_date) %>%
       arrange(transaction_date)
   )
+  
+ #### Intro Page Text ####
+  output$intro_header <- renderUI({
+    h1("House of Representatives Stock Trading Performance App")
+  })
+  
+  output$intro_author <- renderUI({
+    h3("coded by Brian Ralston")
+  })
+
+  output$intro_body1 <- renderUI({
+    p("This app uses data from Financial Disclosure Reports filed by members of 
+      the US House of Representatives and housed by the Clerk of the House. 
+      Members of Congress fill out at Financial Disclosure Report up to 30 days 
+      after they trade stock(s) with a value of $1,000 or more and include 
+      information about the source, asset, transaction date, and value range.")
+  })
+  
+  output$intro_body2 <- renderUI({
+    p("I have created this app so that the user can summarize the data from 
+      these reports per representative and see which house members are good at 
+      timing the stock market. ")
+  })
+  
+  output$intro_body3 <- renderUI({
+    p("The Dashboard section shows the individual representative’s top 5 stocks, 
+      top 5 sectors, and what committees they serve on. There is also an 
+      interactive plotly graph that shows a graph of the closing prices of those 
+      stocks, and where the congress member bought and sold the stock.")
+  })
+  
+  output$intro_body4 <- renderUI({
+    p("The data table section shows details of the transactions that this 
+      individual representative has made.")
+  })
+  
   
   
 }
