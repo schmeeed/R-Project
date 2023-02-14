@@ -524,6 +524,18 @@ gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "s
 
 stocks2 <- stocks %>% select(ticker, ref_date, price_adjusted)
 
+
+####  Last Minute Table Cleanup: Standardized BUY/SELL Column ####
+
+# gov_trades %>% select(type) %>% unique()
+gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "Sale (Partial)", "sale_full","Sale (Full)", "sale"), "sell", type),
+                                    type = ifelse(type %in% c("purchase", "Purchase") , "buy", type))
+
+#### Get rid of uneeded columns of stocks table ####
+
+stocks <- stocks %>% select(ticker, ref_date, price_adjusted)
+VOO <- VOO %>% select(ticker, ref_date, price_adjusted)
+
 ## WRITE IT ALL TO.CSV ##
 write.csv(gov_trades, 
           file = 'data/CLEAN-gov-trades.csv', 
@@ -560,7 +572,15 @@ write.csv(committees,
           file = "data/CLEAN-committees-all.csv",
           row.names = FALSE)
 
+####Save to RDS for SHINY APP #### 
 
+saveRDS(gov_trades,"shiny_data/gov_trades.rds")
+
+saveRDS(VOO, "shiny_data/RAW-VOO.rds")
+
+saveRDS(stocks, "shiny_data/stocks.rds")
+
+saveRDS(committees, "shiny_data/CLEAN-committees-all.rds")
 
 
 

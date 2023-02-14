@@ -18,33 +18,26 @@ library(rsconnect)
 
 # setwd("/Users/bschmidt/Library/CloudStorage/GoogleDrive-schmidt5364@gmail.com/My\ Drive/#NYC_Data_Science_Academy/Projects/R-Project")
 
-gov_trades <- read.csv(file = "shiny_data/CLEAN-gov-trades.csv")
-VOO <- read.csv(file = "shiny_data/RAW-VOO.csv")
-# stocks <- read_csv(file = "data/CLEAN-stocks-trunc-data.csv")
-# stocks$ref_date <- as.Date(stocks$ref_date)
-stocks <- readRDS("shiny_data/stocks-small.rds")
-committees <- read_csv(file = "shiny_data/CLEAN-committees-all.csv")
+#### LOAD DATA ####
+
+gov_trades <- readRDS(file = "shiny_data/gov_trades.rds")
+
+VOO <- readRDS(file = "shiny_data/RAW-VOO.rds")
+
+stocks <- readRDS("shiny_data/stocks.rds")
+
+committees <- readRDS("shiny_data/CLEAN-committees-all.rds")
 
 # gov_trades %>% filter(ticker == "0QZI.IL")
 
 # stocks_small <- stocks[1:100000,]
 # saveRDS(stocks_small, "stocks-small.rds")
 
-# group all types of sell and buys into either "buy" or "sell"
-gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "Sale (Partial)", "sale_full","Sale (Full)", "sale"), "sell", type),
-                                    type = ifelse(type=="Purchase", "buy", type))
-gov_trades <- gov_trades %>%
-  mutate(disclosure_date = as.Date(disclosure_date),
-         transaction_date = as.Date(transaction_date))
-
-
 get_representatives <- function(state_choice) {
   reps <- gov_trades[gov_trades$state == state_choice,]
   reps2 <- reps %>% arrange(last_name) %>% select(representative) %>% distinct()
   return(reps2)
 }
-
-# saveRDS(stocks, file = "stocks.rds")
 
 
 
@@ -368,9 +361,8 @@ server <- function(input, output, session) {
   gov_trades
   #### Trade Activity ####
   output$trade_activity <- renderPlot(
-    gov_trades %>%
+    gov_trades %>% 
       filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
-      mutate(transaction_date = as.Date(transaction_date)) %>%
       arrange(transaction_date) %>%
       mutate(quarter_year = format(as.yearqtr(transaction_date, format = "%Y-%m-%d"), "%Y Q%q")) %>%
       ggplot(aes(x = quarter_year, fill = type)) + 
