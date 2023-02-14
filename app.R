@@ -12,23 +12,27 @@ library(gghighlight)
 library(plotly)
 library(humaniformat)
 library(DT)
+library(stringr)
+library(rsconnect)
 
 
+# setwd("/Users/bschmidt/Library/CloudStorage/GoogleDrive-schmidt5364@gmail.com/My\ Drive/#NYC_Data_Science_Academy/Projects/R-Project")
 
+gov_trades <- read.csv(file = "shiny_data/CLEAN-gov-trades.csv")
+VOO <- read.csv(file = "shiny_data/RAW-VOO.csv")
+# stocks <- read_csv(file = "data/CLEAN-stocks-trunc-data.csv")
+# stocks$ref_date <- as.Date(stocks$ref_date)
+stocks <- readRDS("shiny_data/stocks-small.rds")
+committees <- read_csv(file = "shiny_data/CLEAN-committees-all.csv")
 
+# gov_trades %>% filter(ticker == "0QZI.IL")
 
-
-setwd("/Users/bschmidt/Library/CloudStorage/GoogleDrive-schmidt5364@gmail.com/My\ Drive/#NYC_Data_Science_Academy/Projects/R-Project")
-
-gov_trades <- read.csv(file = "data/CLEAN-gov-trades.csv")
-VOO <- read.csv(file = "data/RAW-VOO.csv")
-stocks <- read_csv(file = "data/CLEAN-stocks-data.csv")
-committees <- read_csv(file = "data/CLEAN-committees-all.csv")
-stocks$ref_date <- as.Date(stocks$ref_date)
+# stocks_small <- stocks[1:100000,]
+# saveRDS(stocks_small, "stocks-small.rds")
 
 # group all types of sell and buys into either "buy" or "sell"
-gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "sale_full", "sale"), "sell", type),
-                                    type = ifelse(type=="purchase", "buy", type))
+gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "Sale (Partial)", "sale_full","Sale (Full)", "sale"), "sell", type),
+                                    type = ifelse(type=="Purchase", "buy", type))
 gov_trades <- gov_trades %>%
   mutate(disclosure_date = as.Date(disclosure_date),
          transaction_date = as.Date(transaction_date))
@@ -39,6 +43,9 @@ get_representatives <- function(state_choice) {
   reps2 <- reps %>% arrange(last_name) %>% select(representative) %>% distinct()
   return(reps2)
 }
+
+# saveRDS(stocks, file = "stocks.rds")
+
 
 
 #### UI ####
@@ -165,6 +172,11 @@ server <- function(input, output, session) {
     gov_trades %>%
       filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
       distinct(party)
+  })
+  rep_branch <- reactive({
+    gov_trades %>%
+      filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
+      distinct(branch)
   })
   
   filter_range <- reactive({
@@ -343,16 +355,17 @@ server <- function(input, output, session) {
   })
   output$rep_party <- renderValueBox({
     party <- as.character(rep_party())
+    branch <- str_to_title(as.character(rep_branch()))
     icon <- switch(party,
                    "Republican" = icon("republican"),
                    "Democrat" = icon("democrat"))
     color <- switch(party,
                     "Republican" = "red",
                     "Democrat" = "blue")
-    valueBox(party, "Party", icon = icon, color = color)
+    valueBox(party, branch, icon = icon, color = color)
   })
 
-  
+  gov_trades
   #### Trade Activity ####
   output$trade_activity <- renderPlot(
     gov_trades %>%

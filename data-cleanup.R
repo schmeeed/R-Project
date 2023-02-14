@@ -9,33 +9,77 @@ library(purrr)
 ## LOAD DATA
 #install.packages("jsonlite")
 library(jsonlite)
+# House data
 url <- "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
-gov_trades_RAW <- fromJSON(url)
-write.csv(gov_trades_RAW,
-          file = "data/RAW-gov-trades.csv",
+house_trades_RAW <- fromJSON(url)
+write.csv(house_trades_RAW,
+          file = "data/RAW-house-trades.csv",
+          row.names = FALSE)
+# Senate
+url2 <- "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+sen_trades_RAW <- fromJSON(url2)
+write.csv(sen_trades_RAW,
+          file = "data/RAW-senate-trades.csv",
           row.names = FALSE)
 
 
 ## REMOVE COLUMNS
-gov_trades <- gov_trades_RAW %>% select(-ptr_link)
+house_trades <- house_trades_RAW %>% select(-ptr_link)
+sen_trades <- sen_trades_RAW %>% select(-ptr_link)
 
+## add house and senate labels
+house_trades <- house_trades %>% mutate(branch = "house")
+sen_trades <- sen_trades%>% mutate(branch = "senate")
 
-## CHANGE CLASS 
-gov_trades$disclosure_date <- as.Date(gov_trades$disclosure_date, format = "%m/%d/%Y")
-gov_trades$transaction_date <- as.Date(gov_trades$transaction_date, format = "%Y-%m-%d")
+## reconcile columns to prepare for rbind
+colnames(house_trades)
+colnames(sen_trades)
 
+sen_trades <- sen_trades %>% mutate(disclosure_year = format(as.Date(disclosure_date, format = "%m/%d/%Y"), "%Y")) 
+house_trades <- house_trades %>% mutate(asset_type = NA)
+colnames(sen_trades)[10] <- "representative"
+house_trades <- house_trades %>% mutate(comment = NA)
+sen_trades <- sen_trades %>% mutate(district = NA)
+sen_trades <- sen_trades %>% mutate(cap_gains_over_200_usd = NA)
+
+sen_trades <- sen_trades %>% select(disclosure_year, disclosure_date, transaction_date, owner,
+                      ticker, asset_description, asset_type, type, amount,  comment, 
+                      representative, district, state, cap_gains_over_200_usd, 
+                      industry, sector, party, branch)
+house_trades <- house_trades %>% select(disclosure_year, disclosure_date, transaction_date, owner,
+                        ticker, asset_description, asset_type, type, amount,  comment, 
+                        representative, district, state, cap_gains_over_200_usd, 
+                        industry, sector, party, branch)
+
+## CHANGE to date CLASS 
+house_trades$disclosure_date <- as.Date(house_trades$disclosure_date, format = "%m/%d/%Y")
+house_trades$transaction_date <- as.Date(house_trades$transaction_date, format = "%Y-%m-%d")
+sen_trades$disclosure_date <- as.Date(sen_trades$disclosure_date, format = "%m/%d/%Y")
+sen_trades$transaction_date <- as.Date(sen_trades$disclosure_date, format = "%m/%d/%Y")
+class(sen_trades$disclosure_date)
+
+colnames(house_trades)
+colnames(sen_trades)
+
+# rbind together
+gov_trades <- rbind(house_trades, sen_trades)
 
 ## REMOVE DATA 
-
 # remove bad date data
-gov_trades <- gov_trades %>% filter(transaction_date > "2017-09-04")
+gov_trades %>% filter(is.na(transaction_date)) # 4 transactions don't  have dates
 
-# remove "exchange" trade type. I'm having trouble figuring out how to deal with this data and since its only <100 observations, i'll drop it
-gov_trades <- gov_trades %>% filter(type != "exchange")
+gov_trades <- gov_trades %>% filter(transaction_date > "2012-01-01") # 7 transactions have misformatted dates 
+
+# remove "exchange" trade type. I'm having trouble figuring out how to deal with this data and since its only 217 observations, I'll drop it
+gov_trades <- gov_trades %>% filter(type != "exchange") #139
+gov_trades <- gov_trades %>% filter(type != "Exchange") #78
+gov_trades <- gov_trades %>% filter(type != "N/A") #793 transactions that have very little information, not ticker symbol, but has rep and date...I'll drop.
+
+gov_trades$type %>% unique()
 
 # remove NA Ticker symbols
 gov_trades <- gov_trades %>% filter(!is.na(ticker)) %>%
-  filter(ticker != "--")
+  filter(ticker != "--") # 1369 transactions without tickers removed
 
 
 ### FORMATTING ###
@@ -45,7 +89,8 @@ gov_trades <- gov_trades %>%
   separate(col = amount,into =c("lower_bound", "upper_bound"), sep = " -")
 
 # All Lower bounds are present, it's the upper bounds that are missing
-gov_trades %>% filter(is.na(lower_bound))
+gov_trades %>% filter(lower_bound == "")
+gov_trades %>% filter(upper_bound == "") %>% select(lower_bound) %>% unique()
 
 # it's only the upper bounds of the $1,000-$15,000. So I will impute the $15,000 for those missing values. 
 gov_trades$upper_bound <- replace(gov_trades$upper_bound, gov_trades$upper_bound == "", "15000")
@@ -55,13 +100,11 @@ gov_trades$upper_bound <- replace(gov_trades$upper_bound, gov_trades$upper_bound
 gov_trades$lower_bound <- as.numeric(str_remove_all(gov_trades$lower_bound, "[$, ]"))
 gov_trades$upper_bound <- as.numeric(str_remove_all(gov_trades$upper_bound, "[$, ]"))
 
-
 ## STOCK PRICE HISTORY
 #install.packages("yfR")
 library(yfR) # yahoo finance package
 # Unique Ticker symbols from gov_trades transactions to pull from yahoo finance
 tickers <- gov_trades %>% arrange(ticker) %>% pull(ticker) %>% unique()
-
 
 ## Replace historic ticker symbols with updated ones
 changes_2017 <- read.csv("data/actions-changes-2017.csv", header = TRUE, sep = ",")
@@ -104,7 +147,7 @@ last.date <- Sys.Date() # today
 freq.data <- "daily"
 ticker_length <- gov_trades %>% arrange(ticker) %>% pull(ticker) %>% unique() %>% length()
 
-# the function stops fetching data after it runs into some weird error and then stops the following records from pulling...so indentify those locations and split into sections
+# the function stops fetching data after it runs into some weird error and then stops the following records from pulling...so identify those locations and split into sections
 # it might have something to do with API limits: "Using the Public API (without authentication), you are limited to 2,000 requests per hour per IP (or up to a total of 48,000 requests a day)."
 tickers1 <- tickers[1:500]
 tickers2 <- tickers[501:930]
@@ -114,8 +157,12 @@ tickers3a <- tickers[1395:1500]
 tickers4 <- tickers[1501:1722]
 tickers4a <- tickers[1723:1870]
 tickers4b <- tickers[1871:2000]
-tickers5 <- tickers[2001:2160]
-tickers5a <- tickers[2161:ticker_length]
+tickers5 <- tickers[2001:2131]
+tickers5a <- tickers[2132:2300]
+tickers6 <- tickers[2301:2500]
+tickers7 <- tickers[2501:2600]
+tickers8 <- tickers[2601:2700]
+tickers9 <- tickers[2701:ticker_length]
 
 
 
@@ -126,76 +173,102 @@ stocks1 <- yf_get(tickers = tickers1,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 419/500 84% success rate in downloading tickers
 stocks2 <- yf_get(tickers = tickers2, 
                   first_date = first.date,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 358/430 83% success rate in downloading tickers
 stocks2a <- yf_get(tickers = tickers2a, 
                    first_date = first.date,
                    last_date = last.date, 
                    freq_data = freq.data,
                    do_cache = TRUE,
-                   thresh_bad_data = 0)
+                   thresh_bad_data = 0) # 61/70 87% success rate in downloading tickers
 stocks3 <- yf_get(tickers = tickers3, 
                   first_date = first.date,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 350/394 89% success rate in downloading tickers
 stocks3a <- yf_get(tickers = tickers3a, 
                   first_date = first.date,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 89/106 84% success rate in downloading tickers
 stocks4 <- yf_get(tickers = tickers4, 
                   first_date = first.date,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 192/222 86% success rate in downloading tickers
 stocks4a <- yf_get(tickers = tickers4a, 
                    first_date = first.date,
                    last_date = last.date, 
                    freq_data = freq.data,
                    do_cache = TRUE,
-                   thresh_bad_data = 0)
+                   thresh_bad_data = 0) # 135/148 91% success rate in downloading tickers
 stocks4b <- yf_get(tickers = tickers4b, 
                    first_date = first.date,
                    last_date = last.date, 
                    freq_data = freq.data,
                    do_cache = TRUE,
-                   thresh_bad_data = 0)
+                   thresh_bad_data = 0) # 115/130 88% success rate in downloading tickers
 stocks5 <- yf_get(tickers = tickers5, 
                   first_date = first.date,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 103/131 79% success rate in downloading tickers
 stocks5a <- yf_get(tickers = tickers5a, 
                   first_date = first.date,
                   last_date = last.date, 
                   freq_data = freq.data,
                   do_cache = TRUE,
-                  thresh_bad_data = 0)
+                  thresh_bad_data = 0) # 155/169 92% success rate in downloading tickers
+stocks6 <- yf_get(tickers = tickers6, 
+                  first_date = first.date,
+                  last_date = last.date, 
+                  freq_data = freq.data,
+                  do_cache = TRUE,
+                  thresh_bad_data = 0) # 171/200 86% success rate in downloading tickers
+stocks7<- yf_get(tickers = tickers7, 
+                 first_date = first.date,
+                 last_date = last.date, 
+                 freq_data = freq.data,
+                 do_cache = TRUE,
+                 thresh_bad_data = 0) # 87/100 87% success rate in downloading tickers
+stocks8<- yf_get(tickers = tickers8, 
+                 first_date = first.date,
+                 last_date = last.date, 
+                 freq_data = freq.data,
+                 do_cache = TRUE,
+                 thresh_bad_data = 0) # 81/100 81% success rate in downloading tickers
+stocks9<- yf_get(tickers = tickers9, 
+                 first_date = first.date,
+                 last_date = last.date, 
+                 freq_data = freq.data,
+                 do_cache = TRUE,
+                 thresh_bad_data = 0) # 43/56 77% success rate in downloading tickers
 
 # BINDING stock tables together for ONE GIANT stocks table
-stocks <- bind_rows(stocks1, stocks2, stocks2a, stocks3, stocks4, stocks4a, stocks4b, stocks5)
+stocks <- bind_rows(stocks1, stocks2, stocks2a, stocks3, stocks4, stocks4a, stocks4b, stocks5, stocks6, stocks7, stocks8, stocks9)
 
-## APPENDING GOVERNMENT TRADES WITH PRICE DATA FROM THAT DATE ##
+## APPENDING GOVERNMENT TRADES WITH PRICE DATA FROM THAT transaction DATE ##
 gov_trades <- gov_trades %>% 
   left_join(y=stocks, by = c("transaction_date" = "ref_date", "ticker" = "ticker")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-           representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE)
-  
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE)
+
+
   
 
 #### DROP NA VALUES####
-gov_trades <- gov_trades %>% filter(!is.na(price_adjusted))
+gov_trades <- gov_trades %>% filter(!is.na(price_adjusted)) # 3899 transactions were unable to match to a ticker on yahoo finance, DROPPING
+
 
 ## APPENDING GOVERNMENT TRADES WITH PRICE DATA FROM 30/90/365 days from THAT DATE ##
 #install.packages("bizdays")
@@ -212,7 +285,7 @@ library(bizdays) # for rounding dates to the nearest business day to get accurat
 library(RQuantLib)
 
 ####SET CALENDAR####
-fromD <- as.Date("2017-01-01")
+fromD <- as.Date("2012-01-01")
 toD <- as.Date("2030-12-31")
 
 myholidays <- getHolidays(fromD, toD)        # US New York Stock Exchange
@@ -224,31 +297,48 @@ calendars() # LOOK AT CALENDARS IN MY SYSTEM
 ####################
 
 
-
+## Append the dates 5/30/90/365/todate
 gov_trades <- gov_trades %>% 
-  mutate(price_one_month_date = adjust.previous(transaction_date + months(1),"MyNYSE"),
-                      price_three_months_date = adjust.previous(transaction_date + months(3),"MyNYSE"),
-                      price_one_year_date = adjust.previous(transaction_date + years(1),"MyNYSE"))
+  mutate(price_one_week_date = adjust.previous(transaction_date + weeks(1),"MyNYSE"),
+         price_one_month_date = adjust.previous(transaction_date + months(1),"MyNYSE"),
+         price_three_months_date = adjust.previous(transaction_date + months(3),"MyNYSE"),
+         price_one_year_date = adjust.previous(transaction_date + years(1),"MyNYSE"),
+         price_to_date_date = adjust.previous(as.Date(Sys.Date()), "MyNYSE")
+         )
+
   # price_one_month later
 gov_trades <- gov_trades %>%
   left_join(y=stocks, by = c("price_one_month_date" = "ref_date", "ticker" = "ticker"), keep = FALSE) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_one_month_date) %>%
   rename(price_one_month = price_adjusted.y, volume = volume.x, price = price_adjusted.x) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-           representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
   # price_three_months later
   left_join(y=stocks, by = c("price_three_months_date" = "ref_date", "ticker" = "ticker")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_three_months_date) %>%
   rename(price_three_months = price_adjusted, volume = volume.x) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-           representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
   # price_one_year later
   left_join(y=stocks, by = c("price_one_year_date" = "ref_date", "ticker" = "ticker")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_one_year_date) %>%
   rename(price_one_year = price_adjusted, volume = volume.x) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-             representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE) 
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
+  # price_to_date
+  left_join(y=stocks, by = c("price_to_date_date" = "ref_date", "ticker" = "ticker")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_to_date_date) %>%
+  rename(price_to_date = price_adjusted, volume = volume.x) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
+  # price_one_week later
+  left_join(y=stocks, by = c("price_one_week_date" = "ref_date", "ticker" = "ticker")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -price_one_week_date) %>%
+  rename(price_one_week = price_adjusted, volume = volume.x) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE)
  
+colnames(gov_trades)
 ####TESTING####
 # colnames(gov_trades)
 # colnames(stocks)  
@@ -270,38 +360,54 @@ gov_trades <- gov_trades %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -ticker.y) %>%
   rename(voo = price_adjusted, volume = volume.x, ticker = ticker.x)
 
-## APPEND VOO + 30/60/365
+## APPEND VOO + 7/30/60/365/todate
 gov_trades <- gov_trades %>% 
-  mutate(voo_one_month_date = adjust.previous(transaction_date + months(1),"MyNYSE"),
+  mutate(voo_one_week_date = adjust.previous(transaction_date + weeks(1),"MyNYSE"),
+         voo_one_month_date = adjust.previous(transaction_date + months(1),"MyNYSE"),
          voo_three_months_date = adjust.previous(transaction_date + months(3),"MyNYSE"),
-         voo_one_year_date = adjust.previous(transaction_date + years(1),"MyNYSE")) %>%
+         voo_one_year_date = adjust.previous(transaction_date + years(1),"MyNYSE"),
+         voo_to_date_date = adjust.previous(as.Date(Sys.Date()), "MyNYSE")) %>%
+  
+  # price one week later
+  left_join(y=VOO, by = c("voo_one_week_date" = "ref_date")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -voo_one_week_date, -ticker.y) %>%
+  rename(voo_one_week = price_adjusted, volume = volume.x, ticker = ticker.x) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
   # price_one_month later
   left_join(y=VOO, by = c("voo_one_month_date" = "ref_date")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -voo_one_month_date, -ticker.y) %>%
   rename(voo_one_month = price_adjusted, volume = volume.x, ticker = ticker.x) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-           representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
   # price_three_months later
   left_join(y=VOO, by = c("voo_three_months_date" = "ref_date")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -voo_three_months_date, -ticker.y) %>%
   rename(voo_three_months = price_adjusted, volume = volume.x, ticker = ticker.x) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-           representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
   # price_one_year later
   left_join(y=VOO, by = c("voo_one_year_date" = "ref_date")) %>%
   select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -voo_one_year_date, -ticker.y) %>%
   rename(voo_one_year = price_adjusted, volume = volume.x, ticker = ticker.x) %>%
-  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, type, lower_bound, upper_bound,
-         representative, district, state, cap_gains_over_200_usd, industry, sector, party, .keep_all = TRUE)
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) %>%
+  # price_to_date
+  left_join(y=VOO, by = c("voo_to_date_date" = "ref_date")) %>%
+  select(-price_open, -price_high, -price_low, -price_close,-ret_closing_prices,-ret_adjusted_prices, -cumret_adjusted_prices, -volume.y, -voo_to_date_date, -ticker.y) %>%
+  rename(voo_to_date = price_adjusted, volume = volume.x, ticker = ticker.x) %>%
+  distinct(disclosure_year, disclosure_date, transaction_date, owner, ticker, asset_description, asset_type, type, lower_bound, upper_bound,
+           representative, district, state, cap_gains_over_200_usd, industry, sector, party, branch, .keep_all = TRUE) 
 
 
 ## Reorder Columns
 
 gov_trades <- gov_trades[,c("ticker", "disclosure_year", "disclosure_date", "transaction_date", 
-              "lower_bound", "upper_bound", "volume", "price", "price_one_month", 
-              "price_three_months" ,"price_one_year" ,"voo", "voo_one_month", "voo_three_months", "voo_one_year",
-              "asset_description", "type","owner", "representative", "district", "state", "cap_gains_over_200_usd",
-              "industry", "sector", "party")]
+              "lower_bound", "upper_bound", "volume", "price", "price_one_week", "price_one_month", 
+              "price_three_months" ,"price_one_year" ,  "price_to_date","voo", "voo_one_week", "voo_one_month", "voo_three_months", "voo_one_year","voo_to_date",
+              "asset_description","asset_type", "type","owner", "representative", "branch", "district", "state", "cap_gains_over_200_usd",
+              "industry", "sector", "party", "comment")]
+
 
 
   
@@ -414,6 +520,10 @@ report_days$report_date <- as.Date(report_days$report_date, format = "%m/%d/%y")
 gov_trades <- gov_trades %>% mutate(type = ifelse(type %in% c("sale_partial", "sale_full", "sale"), "sell", type),
                                     type = ifelse(type=="purchase", "buy", type))
 
+#### Stocks Truncated ####
+
+stocks2 <- stocks %>% select(ticker, ref_date, price_adjusted)
+
 ## WRITE IT ALL TO.CSV ##
 write.csv(gov_trades, 
           file = 'data/CLEAN-gov-trades.csv', 
@@ -421,6 +531,9 @@ write.csv(gov_trades,
 
 write.csv(stocks, 
           file = "data/CLEAN-stocks-data.csv", 
+          row.names = FALSE)
+write.csv(stocks2, 
+          file = "data/CLEAN-stocks-trunc-data.csv", 
           row.names = FALSE)
 
 write.csv(committee_2020, 
