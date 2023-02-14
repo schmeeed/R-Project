@@ -28,11 +28,7 @@ stocks <- readRDS("shiny_data/stocks.rds")
 
 committees <- readRDS("shiny_data/CLEAN-committees-all.rds")
 
-# gov_trades %>% filter(ticker == "0QZI.IL")
-
-# stocks_small <- stocks[1:100000,]
-# saveRDS(stocks_small, "stocks-small.rds")
-
+# Function to get the representatives from the state selected
 get_representatives <- function(state_choice) {
   reps <- gov_trades[gov_trades$state == state_choice,]
   reps2 <- reps %>% arrange(last_name) %>% select(representative) %>% distinct()
