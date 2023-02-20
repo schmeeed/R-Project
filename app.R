@@ -35,6 +35,14 @@ get_representatives <- function(state_choice) {
   return(reps2)
 }
 
+#Function to format Dollars in the Millions to "$4.2M"
+
+million_format <- function(x) {
+  ifelse(x > 999999,
+         paste0("$", format(round(x/1e6, 1), nsmall = 1), "M"),
+         paste0("$", format(x, big.mark = ",")))
+}
+
 
 
 #### UI ####
@@ -178,32 +186,25 @@ server <- function(input, output, session) {
 
   rep_top_sectors <- reactive({
     gov_trades %>%
-      filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
-      mutate(transaction_date = as.Date(transaction_date)) %>%
-      group_by(sector) %>%
-      count() %>% 
-      filter(!is.na(sector)) %>%
-      arrange(desc(n)) %>%
+      filter((state == input$stateinputid) & (representative == input$repsinputid), !is.na(sector)) %>%
+      group_by(sector) %>% 
+      summarise(lower_bound = sum(lower_bound),
+                upper_bound = sum(upper_bound),
+                count = n()) %>% 
+      arrange(desc(upper_bound)) %>%
+      mutate(range = paste0(million_format(lower_bound)," - ", million_format(upper_bound), "       (", count,")")) %>%
       head(5)
   })
   rep_top_tickers <- reactive({
-    gov_trades %>%
+      gov_trades %>% 
       filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
-      mutate(transaction_date = as.Date(transaction_date)) %>%
-      group_by(ticker) %>%
-      count() %>% 
-      arrange(desc(n)) %>%
-      head(5)
-  })
-  
-  rep_top_sectors <- reactive({
-    gov_trades %>%
-      filter((state == input$stateinputid) & (representative == input$repsinputid)) %>%
-      mutate(transaction_date = as.Date(transaction_date)) %>%
-      group_by(sector) %>%
-      count() %>% 
-      arrange(desc(n)) %>%
-      head(5)
+      group_by(ticker) %>% 
+      summarise(lower_bound = sum(lower_bound),
+                upper_bound = sum(upper_bound),
+                count = n()) %>% 
+      arrange(desc(upper_bound)) %>%
+      mutate(range = paste0(million_format(lower_bound)," - ", million_format(upper_bound), "       (", count,")")) %>%
+      head(5) 
   })
 
   
@@ -236,13 +237,14 @@ server <- function(input, output, session) {
       filter(ticker %in% req(rep_top_tickers())$ticker) %>%
       left_join(y=filtered_count(), by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
       group_by(ticker.x) %>%
-      filter(ref_date >= (min(filtered_count()[["transaction_date"]])-30), ref_date <= (max(filtered_count()[["transaction_date"]])+30))
+      filter(ref_date >= (min(filtered_count()[["transaction_date"]])-30), ref_date <= (max(filtered_count()[["transaction_date"]])+30)) %>%
+      mutate(range  = paste0(million_format(lower_bound), "-", million_format(upper_bound)))
     
     d2 <- highlight_key(d1, ~ticker.x)
     
-    p <- ggplot(d2, aes(x=ref_date, y=price_adjusted, group = ticker.x, color = ticker.x)) +
-      geom_line() +
-      geom_point(aes(x=transaction_date, shape = type, size = 12)) +
+    p <- ggplot(d2, aes(group = ticker.x, color = ticker.x, tooltip = range)) +
+      geom_line(aes(x=ref_date, y=price_adjusted)) +
+      geom_point(aes(x=transaction_date, y=price_adjusted, fill = ticker.x, shape = type, size = lower_bound),color = "black") +
       theme(legend.background = element_rect(fill = "#ECF0F5"),
             panel.background = element_rect(fill = "#ECF0F5"),
             plot.background = element_rect(fill = "#ECF0F5"),
@@ -251,59 +253,54 @@ server <- function(input, output, session) {
       labs(x=element_blank(), y = element_blank()) +
       ggtitle("Top 5 Stocks Timing")
     
-    gg <- ggplotly(p, tooltip = c("y", "x"), text = c("Price", "Date")) %>% layout(showlegend = FALSE)
+    gg <- ggplotly(p, tooltip = c("y", "x", "range")) %>% layout(showlegend = FALSE)
     
     
     highlight(gg, on = "plotly_hover", dynamic = FALSE, debounce = 50)
-    
-    # add_trace(hh, y = d1$price_adjusted)
+
   })
   
   
   #### top_5_stocks ####
   output$top_5_stocks <-renderPlot(
     rep_top_tickers() %>% 
-    ggplot(aes(x=reorder(ticker, n), y = n, color = ticker, label = paste0(ticker," (",n,")"))) +
-    geom_segment(aes(xend = ticker, yend = 0)) +
-    geom_point(size = 4) +
-    scale_y_continuous(limits = c(0,max(rep_top_tickers()$n)*1.6)) +
-    ggtitle("Top 5 Stocks") +
-    theme(legend.background = element_rect(fill = "#ECF0F5"),
-          panel.background = element_rect(fill = "#ECF0F5"),
-          plot.background = element_rect(fill = "#ECF0F5"),
-          panel.grid.minor = element_blank(), 
-          panel.grid.major = element_blank(),
-          axis.text.x=element_blank(),
-          axis.ticks.x=element_blank(),
-          axis.text.y=element_blank(),
-          axis.ticks.y=element_blank()) +
-    labs(x=element_blank(), y = element_blank()) +
-    geom_text(hjust = -.3) +
-    theme(legend.position="none") +
-    coord_flip()
+      ggplot(aes(x=fct_reorder(ticker, lower_bound), y=lower_bound, fill = ticker)) +
+      geom_col(show.legend = FALSE) +
+      coord_flip() +
+      geom_text(aes(label = range), hjust = 1.15, position = "stack", color = "white", fontface = "bold") +
+      theme(
+        legend.background = element_rect(fill = "#ECF0F5"),
+        panel.background = element_rect(fill = "#ECF0F5"),
+        plot.background = element_rect(fill = "#ECF0F5"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+      labs(x=NULL,y=NULL) +
+      scale_y_log10() +
+      ggtitle("Top 5 Stocks by Volume")
     )
   
 
   output$top_5_sectors <- renderPlot(
     rep_top_sectors() %>% 
-      ggplot(aes(x=reorder(sector, n), y = n, label = paste0(sector," (",n,")"))) +
-      geom_segment(aes(xend = sector, yend = 0)) +
-      geom_point(size = 4) +
-      scale_y_continuous(limits = c(0,max(rep_top_sectors()$n)*1.7)) +
-      ggtitle("Top 5 Sectors") +
-      theme(legend.background = element_rect(fill = "#ECF0F5"),
-            panel.background = element_rect(fill = "#ECF0F5"),
-            plot.background = element_rect(fill = "#ECF0F5"),
-            panel.grid.minor = element_blank(), 
-            panel.grid.major = element_blank(),
-            axis.text.x=element_blank(),
-            axis.ticks.x=element_blank(),
-            axis.text.y=element_blank(),
-            axis.ticks.y=element_blank()) +
-      labs(x=element_blank(), y = element_blank()) +
-      geom_text(hjust = -.3) +
-      theme(legend.position="none") +
-      coord_flip()
+      ggplot(aes(x=fct_reorder(sector, lower_bound), y=lower_bound)) +
+      geom_col() +
+      coord_flip() +
+      geom_text(aes(label = range), hjust = 1.15, position = "stack", color = "white", fontface = "bold") +
+      theme(
+        legend.background = element_rect(fill = "#ECF0F5"),
+        panel.background = element_rect(fill = "#ECF0F5"),
+        plot.background = element_rect(fill = "#ECF0F5"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+      labs(x=NULL,y=NULL) +
+      scale_y_log10() +
+      ggtitle("Top 5 Sectors by Volume")
   )
   
   
