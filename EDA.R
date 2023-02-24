@@ -613,9 +613,8 @@ gov_trades %>% filter((price_to_date - price) <0) %>% count() # 5550/16430 33%
 ################################################################################  
 
 ###### TOP PERFORMERS ####
-
 top_perf <- gov_trades %>% 
-  filter(type == "buy") %>%
+  filter(type == "buy", representative != "Donald S. Beyer, Jr.") %>%
   group_by(representative) %>%
   mutate(price_return_one_week = (price_one_week-price)/price,
          price_return_one_month = (price_one_month-price)/price,
@@ -635,6 +634,30 @@ top_perf <- gov_trades %>%
             count = count) %>%
   unique()
 
+# by year
+
+top_perf_year <- gov_trades %>% 
+  filter(type == "buy", representative != "Donald S. Beyer, Jr.") %>%
+  mutate(tr_year =as.numeric(format(transaction_date,'%Y'))) %>%
+  group_by(representative, tr_year) %>%
+  mutate(price_return_one_week = (price_one_week-price)/price,
+         price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         price_return_to_date = (price_to_date-price)/price,
+         count = n()) %>%
+  summarise(Ticker = ticker, 
+            Party = party,
+            Branch = branch,
+            State = state,
+            one_week = mean(price_return_one_week, na.rm = TRUE),
+            one_month = mean(price_return_one_month, na.rm = TRUE),
+            three_months = mean(price_return_three_months, na.rm = TRUE),
+            one_year = mean(price_return_one_year, na.rm = TRUE),
+            to_date = mean(price_return_to_date, na.rm = TRUE),
+            count = count) %>%
+  unique()
+
 #WEEK
 week <- top_perf %>%
   arrange(desc(one_week)) %>%
@@ -642,6 +665,31 @@ week <- top_perf %>%
          value = one_week) %>%
   select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
   head(1)
+
+week2020 <- top_perf_year %>%
+  filter(tr_year == 2020) %>%
+  arrange(desc(one_week)) %>%
+  mutate(period = "Week",
+         value = one_week) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+week2021 <- top_perf_year %>%
+  filter(tr_year == 2021) %>%
+  arrange(desc(one_week)) %>%
+  mutate(period = "Week",
+         value = one_week) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+week2022<- top_perf_year %>%
+  filter(tr_year == 2022) %>%
+  arrange(desc(one_week)) %>%
+  mutate(period = "Week",
+         value = one_week) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+week_year <- rbind(week2020, week2021, week2022)
 
 #Month
 month <- top_perf %>%
@@ -651,6 +699,30 @@ month <- top_perf %>%
   select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
   head(1)
 
+month2020 <- top_perf_year %>%
+  filter(tr_year == 2020) %>%
+  arrange(desc(one_month)) %>%
+  mutate(period = "Month",
+         value = one_month) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+month2021<- top_perf_year %>%
+  filter(tr_year == 2021) %>%
+  arrange(desc(one_month)) %>%
+  mutate(period = "Month",
+         value = one_month) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+month2022 <- top_perf_year %>%
+  filter(tr_year == 2022) %>%
+  arrange(desc(one_month)) %>%
+  mutate(period = "Month",
+         value = one_month) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+month_year <- rbind(month2020,month2021,month2022)
+
 #Three Months
 three_months <- top_perf %>%
   arrange(desc(three_months)) %>%
@@ -658,6 +730,30 @@ three_months <- top_perf %>%
          value = three_months) %>%
   select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
   head(1)
+
+three_months2020 <- top_perf_year %>%
+  filter(tr_year == 2020) %>%
+  arrange(desc(three_months)) %>%
+  mutate(period = "Three Months",
+         value = three_months) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+three_months2021 <- top_perf_year %>%
+  filter(tr_year == 2021) %>%
+  arrange(desc(three_months)) %>%
+  mutate(period = "Three Months",
+         value = three_months) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+three_months2022 <- top_perf_year %>%
+  filter(tr_year == 2022) %>%
+  arrange(desc(three_months)) %>%
+  mutate(period = "Three Months",
+         value = three_months) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+three_months_year <- rbind(three_months2020, three_months2021, three_months2022)
 
 #ONE YEAR
 year <- top_perf %>%
@@ -667,6 +763,29 @@ year <- top_perf %>%
   select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
   head(1)
 
+year2020 <- top_perf_year %>%
+  filter(tr_year == 2020) %>%
+  arrange(desc(one_year)) %>%
+  mutate(period = "Year",
+         value = one_year) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+year2021 <- top_perf_year %>%
+  filter(tr_year == 2021) %>%
+  arrange(desc(one_year)) %>%
+  mutate(period = "Year",
+         value = one_year) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+year2022 <- top_perf_year %>%
+  filter(tr_year == 2022) %>%
+  arrange(desc(one_year)) %>%
+  mutate(period = "Year",
+         value = one_year) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+year_year <- rbind(year2020,year2021,year2022)
+
 #TO_DATE
 to_date <- top_perf %>%
   arrange(desc(to_date)) %>%
@@ -675,14 +794,47 @@ to_date <- top_perf %>%
   select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
   head(1)
 
-top_perf_combined <- rbind(week, month, three_months, year, to_date)
-top_perf_combined
 
+
+to_date2020 <- top_perf_year %>%
+  filter(tr_year == 2020) %>%
+  arrange(desc(to_date)) %>%
+  mutate(period = "To Date",
+         value = to_date) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+to_date2021 <- top_perf_year %>%
+  filter(tr_year == 2021) %>%
+  arrange(desc(to_date)) %>%
+  mutate(period = "To Date",
+         value = to_date) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+to_date2022 <- top_perf_year %>%
+  filter(tr_year == 2022) %>%
+  arrange(desc(to_date)) %>%
+  mutate(period = "To Date",
+         value = to_date) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+to_date_year <- rbind(to_date2022,to_date2021,to_date2020)
+
+
+# combined
+top_perf_combined_factor_levels <- c("Week", "Month", "Three Months", "Year", "To Date")
+top_perf_combined <- rbind(week, month, three_months, year, to_date)
+top_perf_combined <- top_perf_combined %>% mutate(period = factor(period, levels = top_perf_combined_factor_levels))
+
+
+top_perf_year_factor_levels <- c("Week", "Month", "Three Months", "Year", "To Date")
+top_perf_combined_year <- rbind(to_date_year,year_year,three_months_year,month_year,week_year)
+top_perf_combined_year <- top_perf_combined_year %>% mutate(period = factor(period, levels = top_perf_year_factor_levels))
 ## VISUALS
+#overall
 top_perf_combined %>%
-  ggplot(aes(x=fct_reorder(period,value), y=value, fill = Party)) +
+  ggplot(aes(x=fct_rev(period), y=value, fill = Party)) +
   geom_col() +
-  geom_text(aes(label=paste0(representative, ' (',State,")", "\n",round(value*100,2),"%"), y=value),vjust=-.5) +
+  geom_text(aes(label=paste0(representative, ' (',State,")", "\n","AVG: ",round(value*100,2),"%"), y=value),hjust=-.1) +
   scale_fill_manual(values = c("Democrat" = "#629CFF", "Republican" = "#F8756D")) +
   theme(
     legend.background = element_rect(fill = "#ECF0F5"),
@@ -691,10 +843,33 @@ top_perf_combined %>%
     panel.grid.minor = element_blank(),
     panel.grid.major = element_blank(),
     axis.text = element_text(size = 12)) +
-  scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%"), limits = c(0,9)) + 
+  scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%"), limits = c(0,2.5)) + 
   labs(x=NULL,y=NULL) +
+  coord_flip() +
   ggtitle("Top Performing Congress Members AVG Return")
 ggsave(filename = "presentation/images/Top-Performing-Congress-Members-AVG-Return.png", scale = 1)
+
+
+#grouped by year
+top_perf_combined_year %>%
+  ggplot(aes(x=fct_rev(period), y=value, fill = Party)) +
+  geom_col() +
+  geom_text(aes(label=paste0(representative, ' (',State,")", "\n",Ticker," - ",round(value*100,2),"%"), y=value),hjust=-.1) +
+  scale_fill_manual(values = c("Democrat" = "#629CFF", "Republican" = "#F8756D")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#D8D8D8"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12),
+    strip.text.y = element_text(size = 12)) +
+  scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%"), limits = c(0,5)) + 
+  labs(x=NULL,y=NULL) +
+  facet_grid(rows = vars(tr_year)) +
+  coord_flip()+
+  ggtitle("Top Trades made in Each Year")
+ggsave(filename = "presentation/images/Top-Performing-Congress-Members-AVG-Return-per-year.png", scale = 1.01)
 
 
 # Beyer has unreasonable gains (OH. I appended the price_to column incorrectly. It should be adjusted closed. Otherwise I'm comparing adjusted to regular prices which would GREATLY affect)
@@ -1008,12 +1183,12 @@ diff_agg_buy <- diff_gov_trades %>%
          one_year_good_timing_buy = ifelse(diff_one_year > one_year_SP500_avg_buy, TRUE, FALSE),
          to_date_good_timing_buy = ifelse(diff_to_date > to_date_SP500_avg_buy, TRUE, FALSE)
          ) %>%
-  summarise(type = "buy",
-            Good_Week = mean(one_week_good_timing_buy, na.rm = TRUE),
-            Good_Month = mean(one_month_good_timing_buy, na.rm = TRUE),
-            Good_Three_Month = mean(three_months_good_timing_buy, na.rm = TRUE),
-            Good_Year = mean(one_year_good_timing_buy, na.rm = TRUE),
-            Good_To_Date = mean(to_date_good_timing_buy, na.rm = TRUE)
+  summarise(type_ = "buy",
+            One_Week = mean(one_week_good_timing_buy, na.rm = TRUE),
+            One_Month = mean(one_month_good_timing_buy, na.rm = TRUE),
+            Three_Months = mean(three_months_good_timing_buy, na.rm = TRUE),
+            One_Year = mean(one_year_good_timing_buy, na.rm = TRUE),
+            To_Date = mean(to_date_good_timing_buy, na.rm = TRUE)
             )
 #sell
 diff_agg_sell <-  diff_gov_trades %>%
@@ -1023,31 +1198,34 @@ diff_agg_sell <-  diff_gov_trades %>%
          one_year_good_timing_sell = ifelse(diff_one_year < one_year_SP500_avg_sell, TRUE, FALSE),
          to_date_good_timing_sell = ifelse(diff_to_date < to_date_SP500_avg_sell, TRUE, FALSE)
   ) %>%
-  summarise(type = "sell",
-            Good_Week = mean(one_week_good_timing_sell, na.rm = TRUE),
-            Good_Month = mean(one_month_good_timing_sell, na.rm = TRUE),
-            Good_Three_Month = mean(three_months_good_timing_sell, na.rm = TRUE),
-            Good_Year = mean(one_year_good_timing_sell, na.rm = TRUE),
-            Good_To_Date = mean(to_date_good_timing_sell, na.rm = TRUE)
+  summarise(type_ = "sell",
+            One_Week = mean(one_week_good_timing_sell, na.rm = TRUE),
+            One_Month = mean(one_month_good_timing_sell, na.rm = TRUE),
+            Three_Months = mean(three_months_good_timing_sell, na.rm = TRUE),
+            One_Year = mean(one_year_good_timing_sell, na.rm = TRUE),
+            To_Date = mean(to_date_good_timing_sell, na.rm = TRUE)
   )
 
-new_row <- data.frame(type_="total",Good_Week=1,Good_Month=1,Good_Three_Month=1,Good_Year=1,Good_To_Date=1)
 diff_agg <- rbind(diff_agg_sell, diff_agg_buy)
 diff_agg
 
 
 
 
-
+diff_agg_factor_levels <- c("One_Week", "One_Month", "Three_Months", "One_Year", "To_Date")
 
 # visual
 diff_agg %>% 
   pivot_longer(cols=2:6, names_to = "time_frame", values_to = "value") %>% 
-  arrange(desc(value)) %>%
+  arrange(desc(value)) %>% 
+  mutate(time_frame = factor(time_frame, levels = diff_agg_factor_levels)) %>%
   ggplot(aes(x=time_frame, y=value, fill=type_)) +
+  geom_col(aes(y=1, fill = NULL)) +
   geom_col(position="dodge", show.legend = FALSE) +
-  geom_text(aes(label = scales::percent(value,4), y=value+0.05*value), 
-            vjust=5, color = "white", fontface = "bold",position = position_dodge(width=0.9)) +
+  geom_text(aes(label = scales::percent(value,.1), y=value), 
+            vjust=4, color = "white", fontface = "bold",position = position_dodge(width=0.9)) +
+  geom_text(aes(label = scales::percent(1,.1), y = 1),
+            vjust=4, color = "grey", fontface = "bold") +
   scale_fill_manual(values = c("buy" = "#00BA42", "sell" = "#F8756D")) +
   theme(
     legend.background = element_rect(fill = "#ECF0F5"),
@@ -1055,10 +1233,12 @@ diff_agg %>%
     plot.background = element_rect(fill = "#ECF0F5"),
     panel.grid.minor = element_blank(),
     panel.grid.major = element_blank(),
-    axis.text = element_text(size = 12)) +
-  scale_y_continuous(labels = scales::percent) +
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::percent, limits = c(0,1)) +
   labs(x=NULL, y=NULL) +
-  ggtitle("%Total Transactions that Beat the S&P500")
+  ggtitle("% Total Congress Trades that Beat the S&P500")
 ggsave(filename = "presentation/images/Beat-the-S&P500.png")
 
 #### TOP 5 SHORT/MED/LONG TERM TRADERS ####
