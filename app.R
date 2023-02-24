@@ -35,6 +35,12 @@ get_representatives <- function(state_choice) {
   return(reps2)
 }
 
+get_tickers <- function(rep_choice) {
+  ticks <- gov_trades[gov_trades$representative == rep_choice,]
+  ticks2 <- ticks %>% arrange(ticker) %>% select(ticker) %>% distinct()
+  return(ticks2)
+}
+
 #Function to format Dollars in the Millions to "$4.2M"
 
 million_format <- function(x) {
@@ -48,14 +54,14 @@ million_format <- function(x) {
 #### UI ####
 library(shinydashboard)
 ui <- dashboardPage(
-  dashboardHeader(title = 'Legislator Stock Performance Dashboard'),
+  dashboardHeader(title = 'Congress Stocks'),
   dashboardSidebar(
     sidebarUserPanel("Brian Ralston",
-                     image = "https://www.previewsworld.com/SiteImage/MainImage/STL153704.jpg"),
+                     image = "brian-headshot.jpeg"),
     sidebarMenu(
-      menuItem("About", tabName = "about", icon = icon("person")),
-      menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
-      menuItem("Data Table", tabName = "data", icon = icon("database"))
+      menuItem("About", tabName = "about", icon = icon("info")),
+      menuItem("Top Trades & Trends", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("Individual Trades", tabName = "data", icon = icon("person"))
     ),
     selectInput(inputId = "stateinputid",
                 label = "State",
@@ -71,15 +77,18 @@ ui <- dashboardPage(
   dashboardBody(
       tabItems(
         tabItem(tabName = "about",
-                fluidRow(column(8, align="center", offset = 2,
-                                box(htmlOutput('intro_header'), htmlOutput('intro_author'), width = 20, 
-                                    background = 'light-blue'),
+                fluidRow(column(4, align="center", offset = 4,
+                                box(htmlOutput('intro_header1'), 
+                                    htmlOutput('intro_header2'),
+                                    htmlOutput('intro_author'), width = 20, background = 'light-blue'),
                                 tags$style(type="text/css", "#string { text-align:center }"))),
-                fluidRow(column(10, align="center", offset = 1,
+                fluidRow(column(4, align="center", offset = 4,
                                 box(htmlOutput('intro_body1'), div(img(src="david-vives-Nzbkev7SQTg-unsplash.jpg", height=350, width=350)),
                                     htmlOutput('intro_body2'), 
                                     htmlOutput('intro_body3'), 
-                                    htmlOutput('intro_body4'), width = 20, background = 'light-blue'),
+                                    htmlOutput('intro_body4'),
+                                    htmlOutput("intro_footer1"),
+                                    htmlOutput("intro_footer2"), width = 20, background = 'light-blue'),
                                 tags$style(type="text/css", "#string { text-align:justified }")))),
         tabItem(tabName = "dashboard",
                 fluidRow(column(width = 3, valueBoxOutput("rep_party", width = "100%")),
@@ -100,34 +109,30 @@ ui <- dashboardPage(
                          )
                   )
                 ),
+                fluidRow(column(width = 2,
+                                radioButtons("radio_buy_sell",
+                                             label = h3(""),
+                                             inline = TRUE,
+                                             choices = list("Buy" = "buy", "Sell" = "sell"),
+                                             selected = "buy"),
+                                radioButtons("radio_short_med_long", 
+                                             label = h3(""), 
+                                             inline = TRUE,
+                                             choices = list("30 Days" = "Short", "90 Days" = "Medium", "365 Days" = "Long"),
+                                             selected = "Short")),
+                         column(width = 2, div(style = "height:800px;", plotOutput("timing_perf"))),
+                         column(width = 4,
+                         plotOutput("trade_activity")),
+                         column(width = 4,div(style = "height:800px;", dataTableOutput("committee_table")))),
                 fluidRow(
-                  column(width = 8,
-                         plotOutput("trade_activity")
-                         ),
-                  column(width = 4,
-                         dataTableOutput("committee_table")
-                         )
-                  ),
-                fluidRow(
-                  column(width = 4, div(style = "height:800px;", plotOutput("timing_perf")),
-                  ),
-                  column(width = 2,
-                         radioButtons("radio_buy_sell", label = h3(""), inline = TRUE,
-                                      choices = list("Buy" = "buy", "Sell" = "sell"),
-                                      selected = "buy"),
-                         radioButtons("radio_short_med_long", label = h3(""), inline = TRUE,
-                                      choices = list("30 Days" = "Short", "90 Days" = "Medium", "365 Days" = "Long"),
-                                      selected = "Short")
-                  ),
-                  column(width = 6,
-                         plotOutput("treemap"))
-                ),
-                fluidRow(
-                  column(width = 12,
-                         )
-                )
-                ),
-        tabItem(tabName = "data",dataTableOutput("transaction_table"))
+                         # column(width = 6, plotOutput("treemap"))
+                )),
+        tabItem(tabName = "data",
+                fluidRow(column(width = 12, selectInput(inputId = "tickerinputid",
+                                                label = "Ticker",
+                                                choices = gov_trades %>% arrange(ticker) %>% select(ticker) %>% distinct()))),
+                fluidRow(column(width = 12, plotlyOutput("select_stock_viz"))),
+                fluidRow(column(width = 12, dataTableOutput("transaction_table"))))
       )
   )
 )
@@ -144,7 +149,22 @@ server <- function(input, output, session) {
                       selected = "Zoe Lofgren" 
     )
   })
+  
+  observe({
+    updateSelectInput(session,
+                      inputId = "tickerinputid",
+                      choices = get_tickers(input$repsinputid)# custom function: defined in global
+    )
+  })
+  
+  
   #### DEFINE ####
+
+  
+  ticker_filtered <- reactive({
+    gov_trades %>%
+      filter(representative == input$repsinputid, ticker == input$tickerinputid)# input$stateinputid input$repsinputid
+  })
   filtered_count <- reactive({
     gov_trades %>%
       filter((state == input$stateinputid) & (representative == input$repsinputid))# input$stateinputid input$repsinputid
@@ -209,7 +229,7 @@ server <- function(input, output, session) {
 
   
    
-  pal <- c("Winner" = "#01FF70",
+  pal <- c("Winner" = "gold",
            "Loser" = "grey")
   #### OUTPUTS ####
   
@@ -237,14 +257,45 @@ server <- function(input, output, session) {
       filter(ticker %in% req(rep_top_tickers())$ticker) %>%
       left_join(y=filtered_count(), by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
       group_by(ticker.x) %>%
-      filter(ref_date >= (min(filtered_count()[["transaction_date"]])-30), ref_date <= (max(filtered_count()[["transaction_date"]])+30)) %>%
+      filter(ref_date >= (min(filtered_count()[["transaction_date"]])-548), ref_date <= (max(filtered_count()[["transaction_date"]])+548)) %>%
       mutate(range  = paste0(million_format(lower_bound), "-", million_format(upper_bound)))
     
     d2 <- highlight_key(d1, ~ticker.x)
     
-    p <- ggplot(d2, aes(group = ticker.x, color = ticker.x, tooltip = range)) +
+    p <- ggplot(d2, aes(group = ticker.x, color = ticker.x)) +
       geom_line(aes(x=ref_date, y=price_adjusted)) +
-      geom_point(aes(x=transaction_date, y=price_adjusted, fill = ticker.x, shape = type, size = lower_bound),color = "black") +
+      geom_point(aes(x=transaction_date, y=price_adjusted, fill = ticker.x, shape = type, size = lower_bound, tooltip = range),color = "black") +
+      scale_shape_manual(values = c("buy" = 19, "sell" = 17)) +
+      theme(legend.background = element_rect(fill = "#ECF0F5"),
+            panel.background = element_rect(fill = "#ECF0F5"),
+            plot.background = element_rect(fill = "#ECF0F5"),
+            panel.grid.minor = element_blank(),
+            panel.grid.major = element_blank()) +
+      labs(x=element_blank(), y = element_blank()) +
+      ggtitle("Top 5 Stocks by Volume")
+    
+    gg <- ggplotly(p, tooltip = c("y", "x", "range", "type")) %>% layout(showlegend = FALSE)
+    
+    
+    highlight(gg, on = "plotly_hover", dynamic = FALSE, debounce = 50)
+
+  })
+  
+  #### Select_Stock_viz ####
+  output$select_stock_viz <- renderPlotly({
+    d1 <- stocks %>%
+      filter(ticker == input$tickerinputid) %>%
+      left_join(y=ticker_filtered(), by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
+      group_by(ticker.x) %>%
+      filter(ref_date >= (min(ticker_filtered()[["transaction_date"]])-548), ref_date <= (max(ticker_filtered()[["transaction_date"]])+548)) %>%
+      mutate(range  = paste0(million_format(lower_bound), "-", million_format(upper_bound)))
+    
+    d2 <- highlight_key(d1, ~ticker.x)
+    
+    p <- ggplot(d2, aes(group = ticker.x, color = ticker.x)) +
+      geom_line(aes(x=ref_date, y=price_adjusted)) +
+      geom_point(aes(x=transaction_date, y=price_adjusted, fill = ticker.x, shape = type, size = lower_bound, tooltip = range),color = "black") +
+      scale_shape_manual(values = c("buy" = 19, "sell" = 17)) +
       theme(legend.background = element_rect(fill = "#ECF0F5"),
             panel.background = element_rect(fill = "#ECF0F5"),
             plot.background = element_rect(fill = "#ECF0F5"),
@@ -253,11 +304,11 @@ server <- function(input, output, session) {
       labs(x=element_blank(), y = element_blank()) +
       ggtitle("Top 5 Stocks Timing")
     
-    gg <- ggplotly(p, tooltip = c("y", "x", "range")) %>% layout(showlegend = FALSE)
+    gg <- ggplotly(p, tooltip = c("y", "x", "range", "type")) %>% layout(showlegend = FALSE)
     
     
     highlight(gg, on = "plotly_hover", dynamic = FALSE, debounce = 50)
-
+    
   })
   
   
@@ -279,7 +330,7 @@ server <- function(input, output, session) {
         axis.ticks.x=element_blank()) +
       labs(x=NULL,y=NULL) +
       scale_y_log10() +
-      ggtitle("Top 5 Stocks by Volume")
+      ggtitle("Stocks")
     )
   
 
@@ -300,7 +351,7 @@ server <- function(input, output, session) {
         axis.ticks.x=element_blank()) +
       labs(x=NULL,y=NULL) +
       scale_y_log10() +
-      ggtitle("Top 5 Sectors by Volume")
+      ggtitle("Sectors")
   )
   
   
@@ -360,7 +411,7 @@ server <- function(input, output, session) {
       mutate(quarter_year = format(as.yearqtr(transaction_date, format = "%Y-%m-%d"), "%Y Q%q")) %>%
       ggplot(aes(x = quarter_year, fill = type)) + 
       geom_bar() + 
-      scale_fill_manual(values = c("buy" = "#01FF70", "sell" = "#DD4B39")) +
+      scale_fill_manual(values = c("buy" = "#04BE7D", "sell" = "#F8756D")) +
       scale_x_discrete(limits = unique(gov_trades$quarter_year)) + 
       labs(x=element_blank(), y = element_blank()) + 
       ggtitle("Trade Activity") +
@@ -414,22 +465,22 @@ server <- function(input, output, session) {
       scale_fill_manual(values = pal)
   )
   #### treemap ####
-  output$treemap <- renderPlot(
-    gov_trades %>% 
-      filter((state == input$stateinputid) & (representative == input$repsinputid) & (type == input$radio_buy_sell)) %>%
-      mutate(price_return_one_month = (price_one_month-price)/price,
-             price_return_three_months = (price_three_months-price)/price,
-             price_return_one_year = (price_one_year-price)/price,
-             voo_return_one_month = (voo_one_month-voo)/voo,
-             voo_return_three_months = (voo_three_months-voo)/voo,
-             voo_return_one_year = (voo_one_year-voo)/voo) %>%
-      treemap(index= c("sector","ticker"),
-              vSize="lower_bound",
-              vColor = "price_return_one_month",
-              type = "value",
-              title="Stocks by Sector",
-              fontsize.title=20)
-  )
+  # output$treemap <- renderPlot(
+  #   gov_trades %>% 
+  #     filter((state == input$stateinputid) & (representative == input$repsinputid) & (type == input$radio_buy_sell)) %>%
+  #     mutate(price_return_one_month = (price_one_month-price)/price,
+  #            price_return_three_months = (price_three_months-price)/price,
+  #            price_return_one_year = (price_one_year-price)/price,
+  #            voo_return_one_month = (voo_one_month-voo)/voo,
+  #            voo_return_three_months = (voo_three_months-voo)/voo,
+  #            voo_return_one_year = (voo_one_year-voo)/voo) %>%
+  #     treemap(index= c("sector","ticker"),
+  #             vSize="lower_bound",
+  #             vColor = "price_return_one_month",
+  #             type = "value",
+  #             title="Stocks by Sector",
+  #             fontsize.title=20)
+  # )
   
   #### Committee Table ####
   output$committee_table <- renderDataTable({
@@ -449,50 +500,75 @@ server <- function(input, output, session) {
   #### transaction table #### 
   output$transaction_table <- renderDataTable(
     gov_trades %>%
+      mutate(return_one_week = percent((price_one_week-price)/price,accuracy = .01),
+             return_one_month = percent((price_one_month-price)/price,accuracy = .01),
+             return_three_months = percent((price_three_months-price)/price,accuracy = .01),
+             return_one_year = percent((price_one_year-price)/price,accuracy = .01),
+             return_to_date = percent((price_to_date-price)/price,accuracy = .01)) %>%
       filter((state == input$stateinputid) & (representative == input$repsinputid)) %>% # (state == "NC") & (representative == "Virginia Foxx")
       mutate(range = paste0("$",prettyNum(lower_bound, big.mark = ","), " - ", "$", prettyNum(upper_bound, big.mark = ",", scientific = FALSE)),
              price_on_date = paste0("$",round(price,2)),
-             volume_on_date = prettyNum(volume, big.mark = ",")) %>%
-      select(type, sector, ticker, transaction_date, range, price_on_date, volume_on_date) %>%
-      arrange(transaction_date)
+             price_one_week = paste0("$",round(price_one_week,2)),
+             price_one_month = paste0("$",round(price_one_month,2)),
+             price_three_months = paste0("$",round(price_three_months,2)),
+             price_one_year = paste0("$",round(price_one_year,2)),
+             price_to_date = paste0("$",round(price_to_date,2)),
+             volume_on_date = prettyNum(volume, big.mark = ","),
+             trans_dt = transaction_date,
+             disc_dt = disclosure_date) %>%
+      select(type,ticker, sector, trans_dt, disc_dt, range, 
+             price_on_date, price_one_week, return_one_week, 
+             price_one_month, return_one_month, 
+             price_three_months, return_three_months, 
+             price_one_year, return_one_year,
+             price_to_date, return_to_date) %>%
+      arrange(trans_dt)
   )
   
  #### Intro Page Text ####
-  output$intro_header <- renderUI({
-    h1("House of Representatives Stock Trading Performance App")
+  output$intro_header1 <- renderUI({
+    h1("DC Trades")
+  })
+  output$intro_header2 <- renderUI({
+    h2("Congress Stocks Trading App")
   })
   
   output$intro_author <- renderUI({
-    h3("coded by Brian Ralston")
+    h4("Coded by: Brian Ralston")
   })
 
   output$intro_body1 <- renderUI({
-    p("This app uses data from Financial Disclosure Reports filed by members of 
-      the US House of Representatives and housed by the Clerk of the House. 
-      Members of Congress fill out at Financial Disclosure Report up to 30 days 
-      after they trade stock(s) with a value of $1,000 or more and include 
-      information about the source, asset, transaction date, and value range.")
+    p("This app uses data from Financial Disclosure Reports filed by members of US Congress. 
+      Members are required to report transactions within 45 days of trading stocks valued at $1,000 or more. 
+      The reports include information about the source, asset, transaction date, and value range.")
   })
   
   output$intro_body2 <- renderUI({
     p("I have created this app so that the user can summarize the data from 
-      these reports per representative and see which house members are good at 
-      timing the stock market. ")
+      these reports per representative and identify congress members who have 
+      a history of successful stock investments. ")
   })
   
   output$intro_body3 <- renderUI({
-    p("The Dashboard section shows the individual representative’s top 5 stocks, 
-      top 5 sectors, and what committees they serve on. There is also an 
-      interactive plotly graph that shows a graph of the closing prices of those 
-      stocks, and where the congress member bought and sold the stock.")
+    p("This Overview section provides insight into the representative's financial interests and potential conflicts of interest. 
+    You can see how their investments align with their committee assignments, and how successful they are at buying and selling stocks in the short and long term.
+     There is also a great interactive plotly graph to dive into the details of 5 of the larger trades the representatives have made.")
   })
   
   output$intro_body4 <- renderUI({
-    p("The data table section shows details of the transactions that this 
-      individual representative has made.")
+    p("The data table section shows details of the transactions that this individual 
+      representative has made, as well as a way to explore those particular stocks with a plotly graph.")
+    
   })
-  
-  
+  output$intro_footer1<- renderUI({
+    p("Thanks to Timothy Carambat who maintains the api for this dataset on", 
+      a("https://housestockwatcher.com/api", href = "https://housestockwatcher.com/api", style = "color: black;", target = "_blank"))
+  })
+  output$intro_footer2 <- renderUI({
+    p("Visit the link for the complete R-Project Shiny app on",
+      a("My GitHub", href = "https://github.com/schmeeed/R-Project", style = "color: black;", target = "_blank"),
+      " for more information.")
+  })
   
 }
 

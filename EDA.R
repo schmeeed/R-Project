@@ -4,6 +4,7 @@ library(lubridate)
 library(tidyr)
 library(forcats)
 library(scales)
+library(qlcal)
 
 
 setwd("/Users/bschmidt/Library/CloudStorage/GoogleDrive-schmidt5364@gmail.com/My\ Drive/#NYC_Data_Science_Academy/Projects/R-Project")
@@ -23,7 +24,7 @@ committee_2022 <- read.csv("data/CLEAN-committee-2022-data.csv", header = TRUE, 
 gov_trades <- gov_trades %>% mutate(disclosure_date = as.Date(disclosure_date),
                       transaction_date = as.Date(transaction_date))
 
-
+committees %>% filter(last_name == "Collins")
 
 summary(gov_trades)
 # transaction date range from  2014-01-31 through 2023-02-06
@@ -69,13 +70,25 @@ gov_trades %>%
         axis.ticks.y=element_blank())
   ggsave(filename = "presentation/images/transaction-count-by-type.png")
   
-
+#insights
+  gov_trades %>% filter(last_name == "Gaetz")
+  gov_trades %>% filter(type == "sell", !is.na(cap_gains_over_200_usd)) %>% group_by(cap_gains_over_200_usd) %>% count() #5598
+  
+  gov_trades %>% group_by(representative) %>% summarise(n = n()) %>% arrange(desc(n)) %>% summarise(median(n))
+  
+  gov_trades %>% group_by(transaction_date) %>% count() %>% arrange(desc(n))
+  gov_trades %>% group_by(transaction_date) %>% summarise(n=n()) %>% arrange(desc(n)) %>% summarise( mean(n))
+  
+  gov_trades %>% arrange(desc(lower_bound)) %>% select(representative, ticker, transaction_date, state, branch, lower_bound, type)
 #### S&P500 vs Congress Transaction Count ####  
 daily_count <- gov_trades %>% 
     mutate(week_no = strftime(transaction_date,format = "%V")) %>%
     group_by(week_no,transaction_date) %>%
     count()
 daily_count %>% arrange(desc(n))
+colnames(gov_trades)
+
+
 
 VOO %>%
   filter(ref_date > min(gov_trades$transaction_date)-30, ref_date < max(gov_trades$transaction_date) +30) %>%
@@ -147,12 +160,12 @@ gov_trades_delay %>%
 # 1883 transactions were over 45 days and 
 gov_trades_delay %>% filter(delay > 45) %>% nrow()
 
-# top delayed individuals 
+# top delayed individuals by count 
 gov_trades_delay %>% filter(delay > 45) %>% 
   group_by(representative,party) %>% 
   count() %>% 
   arrange(desc(n)) %>% 
-  head(5) %>%
+  head(10) %>%
   ggplot(aes(x=fct_reorder(representative, n), y=n, fill = party)) +
   geom_col() +
   coord_flip() +
@@ -168,8 +181,58 @@ gov_trades_delay %>% filter(delay > 45) %>%
     axis.text.x=element_blank(),
     axis.ticks.x=element_blank()) +
   labs(x=NULL,y=NULL) +
-  ggtitle("# Transactions Reported Late")
-ggsave(filename = "presentation/images/DELAY-Transactions-Reported-Late.png")
+  ggtitle("Total # Transactions Reported Late")
+ggsave(filename = "presentation/images/DELAY-Transactions-Reported-Late-COUNT.png")
+
+# Top delayed by AVERAGE
+gov_trades_delay %>%
+  group_by(representative,party) %>% 
+  summarise(count = n(), Average_Delay = mean(delay))%>% 
+  filter(count>=10) %>%
+  arrange(desc(Average_Delay)) %>% 
+  head(10) %>%
+  ggplot(aes(x=fct_reorder(representative, Average_Delay), y=Average_Delay, fill = party)) +
+  geom_col() +
+  coord_flip() +
+  geom_text(aes(label = round(Average_Delay,2)), hjust = 1.25, position = "stack", color = "white") +
+  scale_fill_manual(values = c("Democrat" = "#629CFF", "Republican" = "#F8756D")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#ECF0F5"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank()) +
+  labs(x=NULL,y=NULL) +
+  ggtitle("LARGEST AVG Delay Between Transaction and Disclosure")
+ggsave(filename = "presentation/images/DELAY-LARGE-Transactions-Reported-Late-AVG.png")
+
+# QUICKEST by AVERAGE
+gov_trades_delay %>%
+  group_by(representative,party) %>% 
+  summarise(count = n(), Average_Delay = mean(delay))%>% 
+  filter(count>=10) %>%
+  arrange(Average_Delay) %>% 
+  head(10)  %>%
+  ggplot(aes(x=fct_reorder(representative, -Average_Delay), y=Average_Delay, fill = party)) +
+  geom_col() +
+  coord_flip() +
+  geom_text(aes(label = round(Average_Delay,2)), hjust = 1.25, position = "stack", color = "white") +
+  scale_fill_manual(values = c("Democrat" = "#629CFF", "Republican" = "#F8756D")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#ECF0F5"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank()) +
+  labs(x=NULL,y=NULL) +
+  ggtitle("SMALLEST AVG Delay Between Transaction and Disclosure")
+ggsave(filename = "presentation/images/DELAY-QUICK-Transactions-Reported-quickest-AVG.png")
 
 
 
@@ -264,9 +327,9 @@ voo_summary_buy <- gov_trades %>%
          voo_return_one_year = (voo_one_year-voo)/voo) %>% 
   filter(type == "buy") %>%
   summarise(ticker = "S&P: BUY",
-            one_month = percent(mean(voo_return_one_month, na.rm = TRUE), accuracy = .01),
-            three_months = percent(mean(voo_return_three_months, na.rm = TRUE), accuracy = .01),
-            one_year = percent(mean(voo_return_one_year, na.rm = TRUE), accuracy = .01)
+            one_month = percent(weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE), accuracy = .01),
+            three_months = percent(weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE), accuracy = .01),
+            one_year = percent(weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE), accuracy = .01)
             )
 voo_summary_sell <- gov_trades %>% 
   mutate(voo_return_one_month = (voo_one_month-voo)/voo,
@@ -274,9 +337,9 @@ voo_summary_sell <- gov_trades %>%
          voo_return_one_year = (voo_one_year-voo)/voo) %>% 
   filter(type == "sell") %>%
   summarise(ticker = "S&P: SELL",
-            one_month = percent(mean(voo_return_one_month, na.rm = TRUE), accuracy = .01),
-            three_months = percent(mean(voo_return_three_months, na.rm = TRUE), accuracy = .01),
-            one_year = percent(mean(voo_return_one_year, na.rm = TRUE), accuracy = .01)
+            one_month = percent(weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE), accuracy = .01),
+            three_months = percent(weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE), accuracy = .01),
+            one_year = percent(weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE), accuracy = .01)
   )
 price_summary_buy <- gov_trades %>% 
   mutate(price_return_one_month = (price_one_month-price)/price,
@@ -284,9 +347,9 @@ price_summary_buy <- gov_trades %>%
          price_return_one_year = (price_one_year-price)/price) %>%
   filter(type == "buy") %>%
   summarise(ticker = "Gov_trades: BUY",
-            one_month = percent(mean(price_return_one_month, na.rm = TRUE), accuracy = .01),
-            three_months = percent(mean(price_return_three_months, na.rm = TRUE), accuracy = .01),
-            one_year = percent(mean(price_return_one_year, na.rm = TRUE), accuracy = .01)
+            one_month = percent(weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE), accuracy = .01),
+            three_months = percent(weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE), accuracy = .01),
+            one_year = percent(weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE), accuracy = .01)
   )
 price_summary_sell <- gov_trades %>% 
   mutate(price_return_one_month = (price_one_month-price)/price,
@@ -294,9 +357,9 @@ price_summary_sell <- gov_trades %>%
          price_return_one_year = (price_one_year-price)/price) %>%
   filter(type == "sell") %>%
   summarise(ticker = "Gov_trades: SELL",
-            one_month = percent(mean(price_return_one_month, na.rm = TRUE), accuracy = .01),
-            three_months = percent(mean(price_return_three_months, na.rm = TRUE), accuracy = .01),
-            one_year = percent(mean(price_return_one_year, na.rm = TRUE), accuracy = .01)
+            one_month = percent(weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE), accuracy = .01),
+            three_months = percent(weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE), accuracy = .01),
+            one_year = percent(weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE), accuracy = .01)
   )
 
 
@@ -307,22 +370,52 @@ combined_summary
 5.66-4.85
 23.74-19.36
 
+## Numeric Values (nogroups)
+voo_summary_num <- gov_trades %>% 
+  mutate(voo_return_one_week = (voo_one_week-voo)/voo,
+         voo_return_one_month = (voo_one_month-voo)/voo,
+         voo_return_three_months = (voo_three_months-voo)/voo,
+         voo_return_one_year = (voo_one_year-voo)/voo,
+         voo_return_to_date = (voo_to_date-voo)/voo) %>%
+  summarise(ticker = "S&P 500",
+            one_week = weighted.mean(voo_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(voo_return_to_date, lower_bound, na.rm = TRUE))
 
-## Numeric Values
+price_summary_num<- gov_trades %>% 
+  mutate(price_return_one_week = (price_one_week-price)/price,
+         price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         price_return_to_date = (price_to_date-price)/price) %>%
+  summarise(ticker = "Congress",
+            one_week = weighted.mean(price_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(price_return_to_date, lower_bound, na.rm = TRUE))
+
+combined_summary_num <- bind_rows(voo_summary_num, price_summary_num)
+combined_summary_num
+
+
+## Numeric Values (buy/sell)
 voo_summary_num_buy <- gov_trades %>% 
   mutate(voo_return_one_week = (voo_one_week-voo)/voo,
          voo_return_one_month = (voo_one_month-voo)/voo,
          voo_return_three_months = (voo_three_months-voo)/voo,
          voo_return_one_year = (voo_one_year-voo)/voo,
          voo_return_to_date = (voo_to_date-voo)/voo) %>%
-  filter(type == "buy") %>%
+  filter(type == "buy") %>% 
   summarise(ticker = "S&P 500",
             type="Buy",
-            one_week = mean(voo_return_one_week, na.rm = TRUE),
-            one_month = mean(voo_return_one_month, na.rm = TRUE),
-            three_months = mean(voo_return_three_months, na.rm = TRUE),
-            one_year = mean(voo_return_one_year, na.rm = TRUE),
-            to_date = mean(voo_return_to_date,na.rm=TRUE)
+            one_week = weighted.mean(voo_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(voo_return_to_date, lower_bound, na.rm = TRUE)
   )
 voo_summary_num_sell <- gov_trades %>% 
   mutate(voo_return_one_week = (voo_one_week-voo)/voo,
@@ -333,11 +426,11 @@ voo_summary_num_sell <- gov_trades %>%
   filter(type == "sell") %>%
   summarise(ticker = "S&P 500",
             type="Sell",
-            one_week = mean(voo_return_one_week, na.rm = TRUE),
-            one_month = mean(voo_return_one_month, na.rm = TRUE),
-            three_months = mean(voo_return_three_months, na.rm = TRUE),
-            one_year = mean(voo_return_one_year, na.rm = TRUE),
-            to_date = mean(voo_return_to_date,na.rm=TRUE)
+            one_week = weighted.mean(voo_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(voo_return_to_date,lower_bound, na.rm = TRUE)
   )
 price_summary_num_buy<- gov_trades %>% 
   mutate(price_return_one_week = (price_one_week-price)/price,
@@ -348,11 +441,11 @@ price_summary_num_buy<- gov_trades %>%
   filter(type == "buy") %>%
   summarise(ticker = "Congress",
             type="Buy",
-            one_week = mean(price_return_one_week, na.rm = TRUE),
-            one_month = mean(price_return_one_month, na.rm = TRUE),
-            three_months = mean(price_return_three_months, na.rm = TRUE),
-            one_year = mean(price_return_one_year, na.rm = TRUE),
-            to_date = mean(price_return_to_date, na.rm = TRUE)
+            one_week = weighted.mean(price_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(price_return_to_date, lower_bound, na.rm = TRUE)
   )
 price_summary_num_sell<- gov_trades %>% 
   mutate(price_return_one_week = (price_one_week-price)/price,
@@ -363,24 +456,97 @@ price_summary_num_sell<- gov_trades %>%
   filter(type == "sell") %>%
   summarise(ticker = "Congress",
             type="Sell",
-            one_week = mean(price_return_one_week, na.rm = TRUE),
-            one_month = mean(price_return_one_month, na.rm = TRUE),
-            three_months = mean(price_return_three_months, na.rm = TRUE),
-            one_year = mean(price_return_one_year, na.rm = TRUE),
-            to_date = mean(price_return_to_date, na.rm = TRUE)
+            one_week = weighted.mean(price_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(price_return_to_date, lower_bound, na.rm = TRUE)
   )
-combined_summary_num <- bind_rows(voo_summary_num_buy, price_summary_num_buy, voo_summary_num_sell, price_summary_num_sell)
-combined_summary_num
+combined_summary_num_buy_sell <- bind_rows(voo_summary_num_buy, price_summary_num_buy, voo_summary_num_sell, price_summary_num_sell)
+combined_summary_num_buy_sell
 
-#visual
 
+## Numeric Values (party AND buy/sell)
+voo_summary_num_buy <- gov_trades %>% 
+  mutate(voo_return_one_week = (voo_one_week-voo)/voo,
+         voo_return_one_month = (voo_one_month-voo)/voo,
+         voo_return_three_months = (voo_three_months-voo)/voo,
+         voo_return_one_year = (voo_one_year-voo)/voo,
+         voo_return_to_date = (voo_to_date-voo)/voo) %>%
+  filter(type == "buy") %>% 
+  filter(party %in% c("Democrat", "Republican")) %>%
+  group_by(party) %>%
+  summarise(ticker = "S&P 500",
+            type="Buy",
+            one_week = weighted.mean(voo_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(voo_return_to_date, lower_bound, na.rm = TRUE)
+  )
+voo_summary_num_sell <- gov_trades %>% 
+  mutate(voo_return_one_week = (voo_one_week-voo)/voo,
+         voo_return_one_month = (voo_one_month-voo)/voo,
+         voo_return_three_months = (voo_three_months-voo)/voo,
+         voo_return_one_year = (voo_one_year-voo)/voo,
+         voo_return_to_date = (voo_to_date-voo)/voo) %>%
+  filter(type == "sell") %>%
+  filter(party %in% c("Democrat", "Republican")) %>%
+  group_by(party) %>%
+  summarise(ticker = "S&P 500",
+            type="Sell",
+            one_week = weighted.mean(voo_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(voo_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(voo_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(voo_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(voo_return_to_date,lower_bound, na.rm = TRUE)
+  )
+price_summary_num_buy<- gov_trades %>% 
+  mutate(price_return_one_week = (price_one_week-price)/price,
+         price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         price_return_to_date = (price_to_date-price)/price) %>%
+  filter(type == "buy") %>%
+  filter(party %in% c("Democrat", "Republican")) %>%
+  group_by(party) %>%
+  summarise(ticker = "Congress",
+            type="Buy",
+            one_week = weighted.mean(price_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(price_return_to_date, lower_bound, na.rm = TRUE)
+  )
+price_summary_num_sell<- gov_trades %>% 
+  mutate(price_return_one_week = (price_one_week-price)/price,
+         price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         price_return_to_date = (price_to_date-price)/price) %>%
+  filter(type == "sell") %>%
+  filter(party %in% c("Democrat", "Republican")) %>%
+  group_by(party) %>%
+  summarise(ticker = "Congress",
+            type="Sell",
+            one_week = weighted.mean(price_return_one_week, lower_bound, na.rm = TRUE),
+            one_month = weighted.mean(price_return_one_month, lower_bound, na.rm = TRUE),
+            three_months = weighted.mean(price_return_three_months, lower_bound, na.rm = TRUE),
+            one_year = weighted.mean(price_return_one_year, lower_bound, na.rm = TRUE),
+            to_date = weighted.mean(price_return_to_date, lower_bound, na.rm = TRUE)
+  )
+combined_summary_num_buy_sell_party <- bind_rows(voo_summary_num_buy, price_summary_num_buy, voo_summary_num_sell, price_summary_num_sell)
+combined_summary_num_buy_sell_party
+
+## Visuals
+
+# No Facet
 combined_summary_num %>%
-  pivot_longer(cols = 3:7, names_to = "period", values_to = "returns") %>%
-  ggplot(aes(x=fct_reorder(period,returns, .desc = TRUE), y=returns, fill = ticker)) +
+  pivot_longer(cols = 2:6, names_to = "period", values_to = "returns") %>%
+  ggplot(aes(x=fct_reorder(period,returns), y=returns, fill = ticker)) +
   geom_col(position = "dodge") +
-  geom_text(aes(label=paste0(round(returns*100,2),"%"), y=returns, group=ticker),
+  geom_text(aes(label=paste0(round(returns*100,2),"%"), y=returns),
             position=position_dodge(width=0.9), size=3, vjust=-0.5) +
-  facet_grid(rows = vars(type)) +
   scale_fill_manual(values = c("Congress" = "#F8756D", "S&P 500" = "#00BA42")) +
   theme(
     legend.background = element_rect(fill = "#ECF0F5"),
@@ -391,12 +557,175 @@ combined_summary_num %>%
     axis.text = element_text(size = 12)) +
   scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%")) +
   labs(x=NULL,y=NULL) +
-  ggtitle("Average Return: Congress vs. S&P 500")
-ggsave(filename = "presentation/images/Average-Return-Congress-vs-SP500.png")
+  ggtitle("Weighted Average Return: Congress vs. S&P 500")
+ggsave(filename = "presentation/images/Average-Weighted-Return-Congress-vs-SP500.png", scale = 1)
 
+
+# Facet buy/sell
+combined_summary_num_buy_sell %>%
+  pivot_longer(cols = 3:7, names_to = "period", values_to = "returns") %>%
+  ggplot(aes(x=fct_reorder(period,returns), y=returns, fill = ticker)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label=paste0(round(returns*100,2),"%"), y=returns, group=ticker),
+            position=position_dodge(width=0.9), size=3, vjust=-0.5) +
+  facet_grid(cols = vars(type)) +
+  scale_fill_manual(values = c("Congress" = "#F8756D", "S&P 500" = "#00BA42")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#ECF0F5"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12)) +
+  scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%")) +
+  labs(x=NULL,y=NULL) +
+  ggtitle("Weighted Average Return: Congress vs. S&P 500")
+ggsave(filename = "presentation/images/Average-Weighted-Return-Congress-vs-SP500-with-buysell.png", scale = 1)
+
+#Facet_Party AND Type
+combined_summary_num_buy_sell_party %>%
+  pivot_longer(cols = 4:8, names_to = "period", values_to = "returns") %>%
+  ggplot(aes(x=fct_reorder(period,returns), y=returns, fill = ticker)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label=paste0(round(returns*100,2),"%"), y=returns, group=ticker),
+            position=position_dodge(width=0.9), size=3, vjust=-0.5) +
+  facet_grid(rows = vars(party), cols = vars(type)) +
+  scale_fill_manual(values = c("Congress" = "#F8756D", "S&P 500" = "#00BA42")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#ECF0F5"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12)) +
+  scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%")) +
+  labs(x=NULL,y=NULL) +
+  ggtitle("Weighted Average Return: Congress vs. S&P 500")
+ggsave(filename = "presentation/images/Average-Weighted-Return-Congress-vs-SP500-with-buysell-and-party.png", scale = 1)
+
+gov_trades %>% count() # 16430
+gov_trades %>% filter((price_one_week - price) <0) %>% count() # 7128/16430 43%
+gov_trades %>% filter((price_one_month - price) <0) %>% count() # 6331/16430 39%
+gov_trades %>% filter((price_three_months - price) <0) %>% count() # 6027/16430 36%
+gov_trades %>% filter((price_one_year - price) <0) %>% count() # 4609/16430 28%
+gov_trades %>% filter((price_to_date - price) <0) %>% count() # 5550/16430 33%
+
+################################################################################  
+
+###### TOP PERFORMERS ####
+
+top_perf <- gov_trades %>% 
+  filter(type == "buy") %>%
+  group_by(representative) %>%
+  mutate(price_return_one_week = (price_one_week-price)/price,
+         price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         price_return_to_date = (price_to_date-price)/price,
+         count = n()) %>%
+  filter(count >= 10) %>%
+  summarise(Party = party,
+            Branch = branch,
+            State = state,
+            one_week = mean(price_return_one_week, na.rm = TRUE),
+            one_month = mean(price_return_one_month, na.rm = TRUE),
+            three_months = mean(price_return_three_months, na.rm = TRUE),
+            one_year = mean(price_return_one_year, na.rm = TRUE),
+            to_date = mean(price_return_to_date, na.rm = TRUE),
+            count = count) %>%
+  unique()
+
+#WEEK
+week <- top_perf %>%
+  arrange(desc(one_week)) %>%
+  mutate(period = "Week",
+         value = one_week) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+#Month
+month <- top_perf %>%
+  arrange(desc(one_month)) %>%
+  mutate(period = "Month",
+         value = one_month) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+#Three Months
+three_months <- top_perf %>%
+  arrange(desc(three_months)) %>%
+  mutate(period = "Three Months",
+         value = three_months) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+#ONE YEAR
+year <- top_perf %>%
+  arrange(desc(one_year)) %>%
+  mutate(period = "Year",
+         value = one_year) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+#TO_DATE
+to_date <- top_perf %>%
+  arrange(desc(to_date)) %>%
+  mutate(period = "To Date",
+         value = to_date) %>%
+  select(-one_week, -one_month,-three_months, -one_year, -to_date) %>%
+  head(1)
+
+top_perf_combined <- rbind(week, month, three_months, year, to_date)
+top_perf_combined
+
+## VISUALS
+top_perf_combined %>%
+  ggplot(aes(x=fct_reorder(period,value), y=value, fill = Party)) +
+  geom_col() +
+  geom_text(aes(label=paste0(representative, ' (',State,")", "\n",round(value*100,2),"%"), y=value),vjust=-.5) +
+  scale_fill_manual(values = c("Democrat" = "#629CFF", "Republican" = "#F8756D")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#ECF0F5"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12)) +
+  scale_y_continuous(labels = function(x) paste0(round(x*100,1), "%"), limits = c(0,9)) + 
+  labs(x=NULL,y=NULL) +
+  ggtitle("Top Performing Congress Members AVG Return")
+ggsave(filename = "presentation/images/Top-Performing-Congress-Members-AVG-Return.png", scale = 1)
+
+
+# Beyer has unreasonable gains (OH. I appended the price_to column incorrectly. It should be adjusted closed. Otherwise I'm comparing adjusted to regular prices which would GREATLY affect)
+
+stocks %>% filter(ticker == "DAIUF", ref_date > "2020-01-01")
+
+DAIUF <- yf_get(tickers = "DAIUF", 
+       first_date = "2020-01-01",
+       last_date = "2023-02-06", 
+       freq_data = "daily",
+       thresh_bad_data = 0)
+
+DAIUF %>% filter(ticker == "DAIUF", ref_date > "2022-09-26")
+
+gov_trades %>% filter(ticker == "DAIUF") %>% select(transaction_date, ticker, price,price_one_week, price_one_month, price_three_months, price_one_year, price_to_date)
+
+gov_trades %>%
+  filter(representative == "Donald S. Beyer, Jr.") %>%   
+  mutate(price_return_one_week = (price_one_week-price)/price,
+         price_return_one_month = (price_one_month-price)/price,
+         price_return_three_months = (price_three_months-price)/price,
+         price_return_one_year = (price_one_year-price)/price,
+         price_return_to_date = (price_to_date-price)/price,
+         count = n()) %>%
+  select(representative,ticker,transaction_date, price, price_one_month,price_return_one_week, price_return_one_month, price_return_three_months, price_return_one_year, price_return_to_date, count) %>%
+  arrange(desc(price_return_to_date))
 
 
 ################################################################################  
+
+
 
 ##### of trades per party ####
 gov_trades %>% 
@@ -542,8 +871,9 @@ ggsave(filename = "presentation/images/Running-Sum-of-Transactions-grouped-by-se
 #### Top Trades ####
 library(bizdays) # for rounding dates to the nearest business day to get accurate stock  dates
 library(RQuantLib)
+library(qlcal)
 
-####SET CALENDAR####
+#SET CALENDAR
 fromD <- as.Date("2012-01-01")
 toD <- as.Date("2030-12-31")
 
@@ -567,23 +897,69 @@ diff_gov_trades <- gov_trades %>%
          diff_month = (price_one_month-price)/price,
          diff_three_months = (price_three_months-price)/price,
          diff_one_year = (price_one_year-price)/price,
-         diff_to_date = (price_to_date-price)/price)
+         diff_to_date = (price_to_date-price)/price,
+         #
+         one_week_congress_avg_buy = .00161,
+         one_month_congress_avg_buy = .0155,
+         three_months_congress_avg_buy = .03,
+         one_year_congress_avg_buy = .159,
+         to_date_congress_avg_buy = .192,
+         #
+         one_week_SP500_avg_buy = -.00173,
+         one_month_SP500_avg_buy = .00467,
+         three_months_SP500_avg_buy = .0226,
+         one_year_SP500_avg_buy = .105,
+         to_date_SP500_avg_buy = .335,
+         #
+         one_week_congress_avg_sell = .00323,
+         one_month_congress_avg_sell = .0148,
+         three_months_congress_avg_sell = .0380,
+         one_year_congress_avg_sell = .288,
+         to_date_congress_avg_sell = .270,
+         #
+         one_week_SP500_avg_sell = .00260,
+         one_month_SP500_avg_sell = .0116,
+         three_months_SP500_avg_sell = .0397,
+         one_year_SP500_avg_sell = .19,
+         to_date_SP500_avg_sell = .244)
 
-my_vector <- c(diff_week, diff_month, diff_three_months, diff_one_year, diff_to_date)
 
-top_performers <- diff_gov_trades %>%
+
+# vector of variable names
+my_vector <- c("diff_week", "diff_month", "diff_three_months", "diff_one_year", "diff_to_date")
+
+# create an empty list to store the outputs
+my_list <- list()
+
+# iterate over the vector and store the outputs in the list
+for (i in my_vector){
+  my_name <- paste0("top_performers_buy_",i) #<--------
+  my_list[[my_name]] <- diff_gov_trades %>%
     filter(type == "buy") %>%
-    # arrange(-diff_week) %>%
-    # arrange(-diff_month) %>%
-    arrange(diff_three_months) %>%
-    # arrange(diff_one_year) %>%
-    # arrange(diff_to_date) %>%
-    select(ticker, representative,state, diff_week,diff_month,diff_three_months, transaction_date,diff_one_year,diff_to_date) %>%
+    arrange(-!!sym(i)) %>%
+    select(ticker, representative, state, diff_week, diff_month, diff_three_months, 
+           transaction_date, diff_one_year, diff_to_date, price_one_week_date,
+           price_one_month_date, price_three_months_date, price_one_year_date, price_to_date_date) %>%
     head(10)
+}
+
+# access the outputs using the variable names
+top_performers_buy_diff_week <- my_list$top_performers_diff_week
+top_performers_buy_diff_month <- my_list$top_performers_diff_month
+top_performers_buy_diff_three_months <- my_list$top_performers_diff_three_months
+top_performers_buy_diff_one_year <- my_list$top_performers_diff_one_year
+top_performers_buy_diff_to_date <- my_list$top_performers_diff_to_date
+
+top_performers_buy_diff_week
+top_performers_buy_diff_month
+top_performers_buy_diff_three_months
+top_performers_buy_diff_one_year
+top_performers_buy_diff_to_date
 
 # visuals  
 
-for (i in 1:nrow(top_performers)){
+
+for (i in 1:nrow(top_performers_diff_week)){ # <--------------------------
   
   rep_filt_trades <- diff_gov_trades %>% filter(representative == top_performers[[i,"representative"]])
   rep_filt_ticker <- top_performers[[i,"ticker"]]
@@ -592,13 +968,20 @@ for (i in 1:nrow(top_performers)){
     filter(ticker %in% rep_filt_ticker) %>%
     left_join(y=rep_filt_trades, by = c("ref_date" = "transaction_date", "ticker" = "ticker"), keep = TRUE) %>%
     group_by(ticker.x) %>%
-    filter(ref_date >= (min(rep_filt_trades$transaction_date)-30), ref_date <= (max(rep_filt_trades$transaction_date)+30))
+    filter(ref_date >= (min(rep_filt_trades$transaction_date)-14), ref_date <= (max(rep_filt_trades$transaction_date)+7)) # <--------------------------
   
   d2 <- highlight_key(d1, ~ticker.x)
   
-  p <- ggplot(d2, aes(group = ticker.x, color = type, shape = type)) +
-    geom_line(aes(x=ref_date, y=price_adjusted)) +
-    geom_point(aes(x=transaction_date, y= price_adjusted, size = 12)) +
+  p <- 
+    # ggplot(d2, aes(group = ticker.x, color = type, shape = type)) +
+    # geom_line(aes(x=ref_date, y=price_adjusted)) +
+    # geom_point(aes(x=transaction_date, y= price_adjusted, size = 12)) +
+    ggplot(d2, aes(group = ticker.x, color = ticker.x)) +
+    geom_line(aes(x=ref_date, y=price_adjusted),color = "black") +
+    geom_point(aes(x=transaction_date, y=price_adjusted, fill = ticker.x, 
+                   shape = type, size = lower_bound)) +
+    geom_vline(xintercept = top_performers[[i,"transaction_date"]], color = "red") +
+    geom_vline(xintercept = top_performers[[i,"price_one_week_date"]], color = "red") + # <--------------------------
     theme(legend.background = element_rect(fill = "#ECF0F5"),
           panel.background = element_rect(fill = "#ECF0F5"),
           plot.background = element_rect(fill = "#ECF0F5"),
@@ -606,12 +989,77 @@ for (i in 1:nrow(top_performers)){
           panel.grid.major = element_blank()) +
   
     labs(x=element_blank(), y = element_blank()) +
-    ggtitle(paste0(top_performers[[i,"representative"]], ": ", top_performers[[i,"ticker"]], "   ", scales::percent(top_performers[[i,"diff_month"]],4), "     ", top_performers[[i,"sector"]]))
-  ggsave(filename = paste0("EDA/buy-month/buy-month",i,".png"), plot = p)
+    ggtitle(paste0(top_performers[[i,"representative"]], ": ", 
+                   top_performers[[i,"ticker"]],
+                   "   ", scales::percent(top_performers[[i,"diff_week"]],1), # <--------------------------
+                   "     ", top_performers[[i,"sector"]]))
+  ggsave(filename = paste0("EDA/buy-week/buy-week-", # <--------------------------
+                           i, " ", top_performers[[i,"representative"]],".png"),
+         plot = p)
 
 }
 
+colnames(diff_gov_trades)
 
+diff_agg_buy <- diff_gov_trades %>%
+  mutate(one_week_good_timing_buy = ifelse(diff_week > one_week_SP500_avg_buy, TRUE, FALSE),
+         one_month_good_timing_buy = ifelse(diff_month > one_month_SP500_avg_buy, TRUE, FALSE),
+         three_months_good_timing_buy = ifelse(diff_three_months > three_months_SP500_avg_buy, TRUE, FALSE),
+         one_year_good_timing_buy = ifelse(diff_one_year > one_year_SP500_avg_buy, TRUE, FALSE),
+         to_date_good_timing_buy = ifelse(diff_to_date > to_date_SP500_avg_buy, TRUE, FALSE)
+         ) %>%
+  summarise(type = "buy",
+            Good_Week = mean(one_week_good_timing_buy, na.rm = TRUE),
+            Good_Month = mean(one_month_good_timing_buy, na.rm = TRUE),
+            Good_Three_Month = mean(three_months_good_timing_buy, na.rm = TRUE),
+            Good_Year = mean(one_year_good_timing_buy, na.rm = TRUE),
+            Good_To_Date = mean(to_date_good_timing_buy, na.rm = TRUE)
+            )
+#sell
+diff_agg_sell <-  diff_gov_trades %>%
+  mutate(one_week_good_timing_sell = ifelse(diff_week < one_week_SP500_avg_sell, TRUE, FALSE),
+         one_month_good_timing_sell = ifelse(diff_month < one_month_SP500_avg_sell, TRUE, FALSE),
+         three_months_good_timing_sell = ifelse(diff_three_months < three_months_SP500_avg_sell, TRUE, FALSE),
+         one_year_good_timing_sell = ifelse(diff_one_year < one_year_SP500_avg_sell, TRUE, FALSE),
+         to_date_good_timing_sell = ifelse(diff_to_date < to_date_SP500_avg_sell, TRUE, FALSE)
+  ) %>%
+  summarise(type = "sell",
+            Good_Week = mean(one_week_good_timing_sell, na.rm = TRUE),
+            Good_Month = mean(one_month_good_timing_sell, na.rm = TRUE),
+            Good_Three_Month = mean(three_months_good_timing_sell, na.rm = TRUE),
+            Good_Year = mean(one_year_good_timing_sell, na.rm = TRUE),
+            Good_To_Date = mean(to_date_good_timing_sell, na.rm = TRUE)
+  )
+
+new_row <- data.frame(type_="total",Good_Week=1,Good_Month=1,Good_Three_Month=1,Good_Year=1,Good_To_Date=1)
+diff_agg <- rbind(diff_agg_sell, diff_agg_buy)
+diff_agg
+
+
+
+
+
+
+# visual
+diff_agg %>% 
+  pivot_longer(cols=2:6, names_to = "time_frame", values_to = "value") %>% 
+  arrange(desc(value)) %>%
+  ggplot(aes(x=time_frame, y=value, fill=type_)) +
+  geom_col(position="dodge", show.legend = FALSE) +
+  geom_text(aes(label = scales::percent(value,4), y=value+0.05*value), 
+            vjust=5, color = "white", fontface = "bold",position = position_dodge(width=0.9)) +
+  scale_fill_manual(values = c("buy" = "#00BA42", "sell" = "#F8756D")) +
+  theme(
+    legend.background = element_rect(fill = "#ECF0F5"),
+    panel.background = element_rect(fill = "#ECF0F5"),
+    plot.background = element_rect(fill = "#ECF0F5"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.text = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x=NULL, y=NULL) +
+  ggtitle("%Total Transactions that Beat the S&P500")
+ggsave(filename = "presentation/images/Beat-the-S&P500.png")
 
 #### TOP 5 SHORT/MED/LONG TERM TRADERS ####
 colnames(gov_trades)
@@ -655,13 +1103,13 @@ arrange(desc(avg_one_year)) %>%
   coord_flip()
 
 
-############################################################
+################################################################################
 
 economic_indic <- read.csv("https://brian-ralston-r-project.s3.amazonaws.com/economic-indicators-reports-2020-2022.csv", 
           skip = 9, header = TRUE)
 
 
-############################################# APP APP APP####
+############################################# APP APP APP#######################
 #### Trade Activity - APP ####
 VOO <- read.csv(file = "data/RAW-VOO.csv")
 library(zoo)
@@ -925,12 +1373,12 @@ buy_perf_avg <- gov_trades %>%
          voo_performance_one_year = (voo_one_year-voo)/price) %>%
   filter(representative == "Nancy Pelosi", type == "buy") %>%
   summarise(type = "buy",
-            gov_short = mean(price_performance_one_month, na.rm = TRUE),
-            voo_short = mean(voo_performance_one_month, na.rm = TRUE),
-            gov_med = mean(price_performance_three_months, na.rm = TRUE),
-            voo_med = mean(voo_performance_three_months, na.rm = TRUE),
-            gov_long = mean(price_performance_one_year, na.rm = TRUE),
-            voo_long = mean(voo_performance_one_year, na.rm = TRUE)) %>%
+            gov_short = weighted.mean(price_performance_one_month, lower_bound, na.rm = TRUE),
+            voo_short = weighted.mean(voo_performance_one_month, lower_bound, na.rm = TRUE),
+            gov_med = weighted.mean(price_performance_three_months, lower_bound, na.rm = TRUE),
+            voo_med = weighted.mean(voo_performance_three_months, lower_bound, na.rm = TRUE),
+            gov_long = weighted.mean(price_performance_one_year, lower_bound, na.rm = TRUE),
+            voo_long = weighted.mean(voo_performance_one_year, lower_bound, na.rm = TRUE)) %>%
   pivot_longer(cols = 2:7, names_to = "trader", values_to = "values") %>% 
   mutate(trader_cat = ifelse(startsWith(trader, "gov"), "Government", "S&P 500"),
          type_cat = case_when(endsWith(trader, "short") ~ "Short",
@@ -946,12 +1394,12 @@ sell_perf_avg <- gov_trades %>%
          voo_performance_one_year = (voo_one_year-voo)/price) %>%
   filter(representative == "Nancy Pelosi", type == "sell") %>%
   summarise(type = "sell",
-            gov_short = mean(price_performance_one_month, na.rm = TRUE),
-            voo_short = mean(voo_performance_one_month, na.rm = TRUE),
-            gov_med = mean(price_performance_three_months, na.rm = TRUE),
-            voo_med = mean(voo_performance_three_months, na.rm = TRUE),
-            gov_long = mean(price_performance_one_year, na.rm = TRUE),
-            voo_long = mean(voo_performance_one_year, na.rm = TRUE)) %>%
+            gov_short = weighted.mean(price_performance_one_month, lower_bound, na.rm = TRUE),
+            voo_short = weighted.mean(voo_performance_one_month, lower_bound, na.rm = TRUE),
+            gov_med = weighted.mean(price_performance_three_months, lower_bound, na.rm = TRUE),
+            voo_med = weighted.mean(voo_performance_three_months, lower_bound, na.rm = TRUE),
+            gov_long = weighted.mean(price_performance_one_year, lower_bound, na.rm = TRUE),
+            voo_long = weighted.mean(voo_performance_one_year, lower_bound, na.rm = TRUE)) %>%
   pivot_longer(cols = 2:7, names_to = "trader", values_to = "values") %>% 
   mutate(trader_cat = ifelse(startsWith(trader, "gov"), "Government", "S&P 500"),
          type_cat = case_when(endsWith(trader, "short") ~ "Short",
@@ -971,7 +1419,7 @@ buy_perf_avg %>%
   mutate(rank = rank(-values),
          winner = ifelse(rank == 1,"Winner", "Loser")) %>%
   ggplot(aes(x=trader_cat, y=values, fill = winner)) + 
-  geom_col(aes(size = 4)) +
+  geom_col(aes(linewidth = 4)) +
   scale_y_continuous(labels = scales::percent) +
   labs(x=element_blank(), y = element_blank()) + 
   ggtitle("Buy Timing Performance") +
@@ -991,7 +1439,7 @@ sell_perf_avg %>%
   mutate(rank = rank(values),
          winner = ifelse(rank == 1,"Winner", "Loser")) %>%
   ggplot(aes(x=trader_cat, y=values, fill = winner)) + 
-  geom_col(aes(size = 4)) +
+  geom_col(aes(linewidth = 4)) +
   scale_y_continuous(labels = scales::percent) +
   labs(x=element_blank(), y = element_blank()) + 
   ggtitle("Sell Timing Performance") +
