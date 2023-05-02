@@ -1,3 +1,47 @@
+# DATA FILES 
+*.csv
+*.json
+
+# Microsoft Office Files #
+*.tmp
+
+# Word 
+*.doc
+*.docx
+*.gdoc
+
+# Word Temporary
+~$*.doc*
+# Word Auto Backup File
+Backup of *.doc*
+
+# Excel
+*.xls
+*.xlsx
+
+# Excel temporary
+~$*.xls*
+# Excel Backup File
+*.xlk
+
+# Powerpoint/googleslides
+*.gslides
+*.pptx
+
+# PowerPoint temporary
+~$*.ppt*
+
+# Ignore common image file types
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.svg
+*.ico
+*.pdf
+
+
 # Compiled source #
 ###################
 *.com
