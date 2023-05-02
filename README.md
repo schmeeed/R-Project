@@ -13,4 +13,7 @@ My Shiny App: **[DC Trades: Congress Stock Trading App](https://ay4dff-brian-sch
 
 I have created this app so that the user can summarize the data from these reports per representative and identify congress members who have a history of successful stock investments.
 
-Thanks to Timothy Carambat who maintains the api for this dataset on https://housestockwatcher.com/api
+Thanks to Timothy Carambat who maintains the api for this dataset here: [House](https://housestockwatcher.com/api) / [Senate](https://senatestockwatcher.com/api)
+
+[Presentation Video](https://www.youtube.com/watch?v=BZqp-YUnANU&t=7277s&ab_channel=CourseCourse)
+[Blog Post](https://nycdatascience.com/blog/student-works/r-shiny/timing-the-stock-market-with-congress/)
